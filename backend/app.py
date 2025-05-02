@@ -3,12 +3,12 @@ import mysql.connector
 
 app = Flask(__name__)
 
-# Connect to MySQL
+# MySQL connection
 db = mysql.connector.connect(
     host="localhost",
     user="root",
     password="Megha@22",
-    database="cgl225"
+    database="new"
 )
 
 @app.route('/')
@@ -18,19 +18,24 @@ def index():
 @app.route('/get-data')
 def get_data():
     cursor = db.cursor()
-    cursor.execute("SELECT `Actual Product`, `Order Tdc`, `O/P Wt` FROM `25datacsv`")
+    cursor.execute("SELECT `Order_Tdc`, `O/P_Wt` FROM `25datacsv`")
     results = cursor.fetchall()
-    
-    data = {
-        'products': [],
-        'order_tdc': [],
-        'output_wt': []
-    }
+
+    order_tdc = []
+    output_wt = []
+
     for row in results:
-        data['products'].append(row[0])
-        data['order_tdc'].append(row[1])
-        data['output_wt'].append(row[2])
-    
+        order_tdc.append(str(row[0]))
+        try:
+            output_wt.append(float(row[1]))
+        except (ValueError, TypeError):
+            output_wt.append(0)  # fallback if null or bad value
+
+    data = {
+        'order_tdc': order_tdc,
+        'output_wt': output_wt
+    }
+
     return jsonify(data)
 
 if __name__ == '__main__':
