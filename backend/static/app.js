@@ -5,7 +5,6 @@ async function searchData() {
     const orderTdc = document.querySelector('input[name="orderTdc"]').value;
     const financialYear = document.querySelector('select[name="financialYear"]').value;
     const shift = document.querySelector('select[name="shift"]').value;
-    
 
     const response = await fetch('/search', {
         method: 'POST',
@@ -20,6 +19,7 @@ async function searchData() {
     } else {
         alert(data.error);
     }
+    
 }
 
 function renderResults(data) {
@@ -56,7 +56,7 @@ function renderResults(data) {
         "Surface Conditioning Mill Elongation", "Tension Leveller Elongation",
         "Furnace Entry Speed", "Tube Treatment 6 Strip Actual Temperature", "PDOTr",
         "PDOPor", "PDOSpeedSetupFurn", "Schd Line No", "NRI", "RA_CODE",
-        "Surface_Roughness_Min", "Surface_Roughness_Max", "Area", "Zinc"
+        "Surface_Roughness_Min", "Surface_Roughness_Max"
     ];
 
     let tableHTML = "<table class='excel-table'><thead><tr>";
@@ -82,3 +82,18 @@ window.addEventListener('load', () => {
     searchData();
 });
 
+function openNav() {
+    document.getElementById("mySidebar").style.width = "250px";
+}
+
+function closeNav() {
+    document.getElementById("mySidebar").style.width = "0";
+}
+
+function uploadData() {
+    alert("Upload button clicked!");
+}
+
+function downloadData() {
+    alert("Download button clicked!");
+}
