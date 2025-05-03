@@ -4,7 +4,6 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# MySQL connection settings
 db_config = {
     'host': 'localhost',
     'user': 'root',
@@ -25,27 +24,61 @@ def search():
     order_tdc = data.get('orderTdc')
     financial_year = data.get('financialYear')
     shift = data.get('shift')
-
-    if not order_tdc:
-        return jsonify({"error": "Order_Tdc is required"}), 400
+    
+    financial_year = request.json.get('financialYear')
+    if not financial_year:
+        table_name = '25datacsv'
 
     table_name = f"{financial_year}datacsv"
+    query = f"""
+    SELECT 
+        `Row`, `Actual Product`, `Segment`, `DP FLAG`, `MotherBatchNo`, `Ip Width`, `Ip Thick`,
+        `Mother Ip Wt`, `Order_Tdc`, `Op Batch No`, `Actual Tdc`, `Op Thk`, `Op Width`, `Prop Ip Wt`,
+        `O/P_Wt`, `Total Length`, `Target coating weight`, `ZN/AlZn Coating Top`, `ZN/AlZn Coating Bot`,
+        `Total Zn/AlZn Coating`, `Spangle Type`, `Tlv Usage`, `Tlv Elongation`, `SPM Usage`,
+        `SPM Elongation`, `Entry Baby Wt`, `Entry End Cut`, `Exit Baby Wt`, `Exit End Cut`,
+        `Trim Loss`, `Total Scrap`, `Surface Finish`, `Passivation_Type`, `Passivation Flag`,
+        `Logo`, `Liner Marking`, `Ip Idm`, `Ip Odm`, `Cr grade`, `Zn theo weight`, `Sleeve`,
+        `L2 Remarks`, `Next Unit`, `Status`, `Material Yield(%) with Zinc`, 
+        `Material Yield(%) without Zinc`, `Start Date`, `Start Time`, `End Date`, `End Time`,
+        `Shift`, `Process Duration(in min)`, `Pdo Time`, `Age(Days)`, `PlanThickness`,
+        `PlanWidth`, `Target Thick`, `Target Width`, `Anneal Code`, `No Of Samples`,
+        `Oil Usage`, `Oil type`, `Plan path`, `Actual Path`, `Customer`, `Order Desc`,
+        `PLTCM/CCM Prod Date`, `QA Remarks`, `Qa Code`, `Ip Mat`, `Distribution Channel`,
+        `destinationCity`, `Plan Order`, `Actual Order`, `Plan Edge Cond`, `Actual Edge`,
+        `NCO Flag`, `Nco Reason`, `Unloaded Wt`, `Trimming`, `End use`, `Hr Batch No`,
+        `Sleeve Used`, `PlnOrdIdDesc`, `Planned Product`, `PlanCustomer`, `L3 remarks`,
+        `coil_type`, `Average Line Speed (mpm)`, `Committed Date`, `Delivery date`, `Idm`,
+        `Odm`, `Heat No`, `Hr grade`, `Hold Reason Remark`, `User Id`, `c`, `mn`, `s`, `si`,
+        `ph`, `al`, `cr`, `ca`, `cu`, `n`, `ni`, `mo`, `v`, `nb`, `ti`, `t1`, `b`, `sn`,
+        `cq`, `ctAvg`, `ftAvg`, `ctAvg`, `hrThk`, `hrWdt`, `hrWt`, `hrCrown`, `hrWdg`,
+        `slabNo`, `Surface Conditioning Mill Force`, `Holding Section Strip Actual Temperature`,
+        `Surface Conditioning Mill Elongation`, `Tension Leveller Elongation`,
+        `Furnace Entry Speed`, `Tube Treatment 6 Strip Actual Temperature`, `PDOTr`,
+        `PDOPor`, `PDOSpeedSetupFurn`, `Schd Line No`, `NRI`, `RA_CODE`,
+        `Surface_Roughness_Min`, `Surface_Roughness_Max`, `Area`, `Zinc`
+    FROM {table_name} WHERE 1=1
+"""
 
-    query = f"SELECT * FROM {table_name} WHERE Order_TDC LIKE %s"
-    params = [f"%{order_tdc}%"]
+    params = []
 
+    if order_tdc:
+        query += " AND `Order Tdc` LIKE %s"
+        params.append(f"%{order_tdc}%")
     if from_date:
-        query += " AND Start_Date >= %s"
+        query += " AND `Start Date` >= %s"
         params.append(from_date)
     if to_date:
-        query += " AND End_Date <= %s"
+        query += " AND `End Date` <= %s"
         params.append(to_date)
     if month:
-        query += " AND MONTH(Start_Date) = %s"
+        query += " AND MONTH(`Start Date`) = %s"
         params.append(month)
     if shift:
         query += " AND Shift = %s"
         params.append(shift)
+
+    query += " LIMIT 500"  # Limit the results to the first 500 rows
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor(dictionary=True)
@@ -59,17 +92,15 @@ def search():
         cursor.close()
         conn.close()
 
-    # Format and rename fields for response
     formatted_results = []
     for row in results:
-        formatted_results.append({
-            'Row': row['ID'],
-            'Start Date': row['Start_Date'].strftime('%Y-%m-%d') if isinstance(row['Start_Date'], datetime) else row['Start_Date'],
-            'End Date': row['End_Date'].strftime('%Y-%m-%d') if isinstance(row['End_Date'], datetime) else row['End_Date'],
-            'Order_Tdc': row['Order_TDC'],
-            'O/P_Wt': row['O/P_Wt'],
-            'Shift': row['Shift']
-        })
+        formatted_row = {}
+        for key, value in row.items():
+            if isinstance(value, datetime):
+                formatted_row[key] = value.strftime('%Y-%m-%d')
+            else:
+                formatted_row[key] = str(value) if value is not None else 'N/A'
+        formatted_results.append(formatted_row)
 
     return jsonify(formatted_results)
 
