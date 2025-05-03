@@ -25,11 +25,15 @@ def search():
     financial_year = data.get('financialYear')
     shift = data.get('shift')
     
-    financial_year = request.json.get('financialYear')
-    if not financial_year:
+    financial_year = data.get('financialYear')
+    if not financial_year or financial_year == 'FY25':
         table_name = '25datacsv'
+    else:
+        table_name = f"{financial_year[2:]}datacsv"
 
-    table_name = f"{financial_year}datacsv"
+
+
+    # table_name = f"{financial_year}datacsv"
     query = f"""
     SELECT 
         `Row`, `Actual Product`, `Segment`, `DP FLAG`, `MotherBatchNo`, `Ip Width`, `Ip Thick`,
