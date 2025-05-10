@@ -28,12 +28,20 @@ def search():
     financial_year = data.get('financialYear')
     if not financial_year or financial_year == 'FY25':
         table_name = '25datacsv'
+    elif financial_year == '24':
+        # Return FY24 data
+        table_name = '24datacsv'
+    elif financial_year == '23':
+        # Return FY23 data
+        table_name = '23datacsv'
+    elif financial_year == '22':
+        # Return FY22 data
+        table_name = '22datacsv'
+    # else:
+    #     return jsonify({'message': 'Data not found'})
     else:
-        table_name = f"{financial_year[2:]}datacsv"
-
-
-
-    # table_name = f"{financial_year}datacsv"
+    #     table_name = f"{financial_year[2:]}datacsv"
+          table_name = f"{financial_year}datacsv"
     query = f"""
     SELECT 
         `Row`, `Actual Product`, `Segment`, `DP FLAG`, `MotherBatchNo`, `Ip Width`, `Ip Thick`,
@@ -60,7 +68,7 @@ def search():
         `Surface Conditioning Mill Elongation`, `Tension Leveller Elongation`,
         `Furnace Entry Speed`, `Tube Treatment 6 Strip Actual Temperature`, `PDOTr`,
         `PDOPor`, `PDOSpeedSetupFurn`, `Schd Line No`, `NRI`, `RA_CODE`,
-        `Surface_Roughness_Min`, `Surface_Roughness_Max`, `Area`, `Zinc`
+        `Surface_Roughness_Min`, `Surface_Roughness_Max`
     FROM {table_name} WHERE 1=1
 """
 

@@ -66,12 +66,38 @@
     </style>
 </head>
 <body>
+
+    <!-- Sidebar -->
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+        <a href="/home">Home</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/reports">Reports</a>
+        <a href="/settings">Settings</a>
+    </div>
+
     <nav>
-        <h1>PRODUCTION DASHBOARD</h1>
+        <span class="hamburger" onclick="openNav()">&#9776;</span>
+        <h1>PRODUCTION</h1>
+        <div class="nav-buttons">
+            <button onclick="uploadData()">Upload</button>
+            <button onclick="downloadData()">Download</button>
+        </div>
     </nav>
+    
 
     <div class="selection-menu">
+<<<<<<< HEAD
         
+=======
+        <label for="unit">Unit:</label>
+        <select id="unit" name="unit">
+            <option value="">Select Unit</option>
+            <option value="CGL-2">CGL-2</option>
+            <option value="CGL-3">CGL-3</option>
+        </select>
+
+>>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
         <label for="fromDate">From:</label>
         <input type="date" id="fromDate" name="fromDate" />
 
