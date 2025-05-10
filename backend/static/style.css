@@ -82,7 +82,8 @@ table.excel-table th {
 table.excel-table td {
     word-wrap: break-word;
     max-width: 200px;
-}
+} 
+
 
 .hamburger {
     font-size: 24px;
