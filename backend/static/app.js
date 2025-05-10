@@ -1,3 +1,4 @@
+// Function to search and display results
 async function searchData() {
     const fromDate = document.querySelector('input[name="fromDate"]').value;
     const toDate = document.querySelector('input[name="toDate"]').value;
@@ -5,11 +6,16 @@ async function searchData() {
     const orderTdc = document.querySelector('input[name="orderTdc"]').value;
     const financialYear = document.querySelector('select[name="financialYear"]').value;
     const shift = document.querySelector('select[name="shift"]').value;
+<<<<<<< HEAD
+    const unit = document.querySelector('select[name="unit"]').value;  // Added unit selection
+    
+=======
 
+>>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
     const response = await fetch('/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromDate, toDate, month, orderTdc, financialYear, shift })
+        body: JSON.stringify({ fromDate, toDate, month, orderTdc, financialYear, shift, unit })  // Include unit in the request
     });
 
     const data = await response.json();
@@ -22,6 +28,7 @@ async function searchData() {
     
 }
 
+// Function to render the results
 function renderResults(data) {
     const resultsDiv = document.getElementById('results');
     resultsDiv.innerHTML = '';
@@ -42,6 +49,10 @@ function renderResults(data) {
         "L2 Remarks", "Next Unit", "Status", "Material Yield(%) with Zinc",
         "Material Yield(%) without Zinc", "Start Date", "Start Time", "End Date", "End Time",
         "Shift", "Process Duration(in min)", "Pdo Time", "Age(Days)", "PlanThickness",
+<<<<<<< HEAD
+        "PlanWidth", "Target Thick", "Target Width", "Anneal Code", "No Of Rolls", "Coil Weight",
+        "Production yield"
+=======
         "PlanWidth", "Target Thick", "Target Width", "Anneal Code", "No Of Samples",
         "Oil Usage", "Oil type", "Plan path", "Actual Path", "Customer", "Order Desc",
         "PLTCM/CCM Prod Date", "QA Remarks", "Qa Code", "Ip Mat", "Distribution Channel",
@@ -57,6 +68,7 @@ function renderResults(data) {
         "Furnace Entry Speed", "Tube Treatment 6 Strip Actual Temperature", "PDOTr",
         "PDOPor", "PDOSpeedSetupFurn", "Schd Line No", "NRI", "RA_CODE",
         "Surface_Roughness_Min", "Surface_Roughness_Max"
+>>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
     ];
 
     let tableHTML = "<table class='excel-table'><thead><tr>";
@@ -77,10 +89,28 @@ function renderResults(data) {
     resultsDiv.innerHTML = tableHTML;
 }
 
+// Scroll to Top button visibility and action
+window.onscroll = function() {
+    const scrollToTopBtn = document.getElementById("scrollToTopBtn");
+    if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+        scrollToTopBtn.style.display = "block";
+    } else {
+        scrollToTopBtn.style.display = "none";
+    }
+};
+
+document.getElementById("scrollToTopBtn").onclick = function() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+// Set the default value for financial year and run the initial search on load
 window.addEventListener('load', () => {
     document.querySelector('select[name="financialYear"]').value = 'FY25';
+    document.querySelector('select[name="unit"]').value = 'cgl2';  // Set default unit value (cgl2)
     searchData();
 });
+<<<<<<< HEAD
+=======
 
 function openNav() {
     document.getElementById("mySidebar").style.width = "250px";
@@ -97,3 +127,4 @@ function uploadData() {
 function downloadData() {
     alert("Download button clicked!");
 }
+>>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
