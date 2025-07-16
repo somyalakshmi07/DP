@@ -6,12 +6,9 @@ async function searchData() {
     const orderTdc = document.querySelector('input[name="orderTdc"]').value;
     const financialYear = document.querySelector('select[name="financialYear"]').value;
     const shift = document.querySelector('select[name="shift"]').value;
-<<<<<<< HEAD
+
     const unit = document.querySelector('select[name="unit"]').value;  // Added unit selection
     
-=======
-
->>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
     const response = await fetch('/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,26 +46,8 @@ function renderResults(data) {
         "L2 Remarks", "Next Unit", "Status", "Material Yield(%) with Zinc",
         "Material Yield(%) without Zinc", "Start Date", "Start Time", "End Date", "End Time",
         "Shift", "Process Duration(in min)", "Pdo Time", "Age(Days)", "PlanThickness",
-<<<<<<< HEAD
         "PlanWidth", "Target Thick", "Target Width", "Anneal Code", "No Of Rolls", "Coil Weight",
         "Production yield"
-=======
-        "PlanWidth", "Target Thick", "Target Width", "Anneal Code", "No Of Samples",
-        "Oil Usage", "Oil type", "Plan path", "Actual Path", "Customer", "Order Desc",
-        "PLTCM/CCM Prod Date", "QA Remarks", "Qa Code", "Ip Mat", "Distribution Channel",
-        "destinationCity", "Plan Order", "Actual Order", "Plan Edge Cond", "Actual Edge",
-        "NCO Flag", "Nco Reason", "Unloaded Wt", "Trimming", "End use", "Hr Batch No",
-        "Sleeve Used", "PlnOrdIdDesc", "Planned Product", "PlanCustomer", "L3 remarks",
-        "coil_type", "Average Line Speed (mpm)", "Committed Date", "Delivery date", "Idm",
-        "Odm", "Heat No", "Hr grade", "Hold Reason Remark", "User Id", "c", "mn", "s", "si",
-        "ph", "al", "cr", "ca", "cu", "n", "ni", "mo", "v", "nb", "ti", "t1", "b", "sn",
-        "cq", "ctAvg", "ftAvg", "hrThk", "hrWdt", "hrWt", "hrCrown", "hrWdg",
-        "slabNo", "Surface Conditioning Mill Force", "Holding Section Strip Actual Temperature",
-        "Surface Conditioning Mill Elongation", "Tension Leveller Elongation",
-        "Furnace Entry Speed", "Tube Treatment 6 Strip Actual Temperature", "PDOTr",
-        "PDOPor", "PDOSpeedSetupFurn", "Schd Line No", "NRI", "RA_CODE",
-        "Surface_Roughness_Min", "Surface_Roughness_Max"
->>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
     ];
 
     let tableHTML = "<table class='excel-table'><thead><tr>";
@@ -109,22 +88,3 @@ window.addEventListener('load', () => {
     document.querySelector('select[name="unit"]').value = 'cgl2';  // Set default unit value (cgl2)
     searchData();
 });
-<<<<<<< HEAD
-=======
-
-function openNav() {
-    document.getElementById("mySidebar").style.width = "250px";
-}
-
-function closeNav() {
-    document.getElementById("mySidebar").style.width = "0";
-}
-
-function uploadData() {
-    alert("Upload button clicked!");
-}
-
-function downloadData() {
-    alert("Download button clicked!");
-}
->>>>>>> 175471379681de7880ce122ad8d994bd9c6b17e7
