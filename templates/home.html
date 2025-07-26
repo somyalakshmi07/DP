@@ -1,0 +1,36 @@
+<!-- <h2>Select Team</h2>
+<form method="post">
+    <label>Choose Team:</label>
+    <select name="team">
+        <option value="production">Production</option>
+        <option value="marketing">Marketing</option>
+    </select><br><br>
+    <input type="email" name="email" placeholder="Enter email" required><br><br>
+    <button type="submit">Request Access</button>
+</form> -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Select Team</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h2>Select Team</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+        <label>Choose Team:</label>
+        <select name="team">
+            <option value="production">Production</option>
+            <option value="marketing">Marketing</option>
+        </select>
+        <input type="email" name="email" placeholder="Enter email" required>
+        <button type="submit">Request Access</button>
+    </form>
+</div>
+</body>
+</html>
