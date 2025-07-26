@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Production Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h2>Production Login</h2>
+    <form action="/send_otp" method="post">
+      <input type="hidden" name="department" value="production">
+
+      <label for="username">Username:</label>
+      <input type="text" name="username" required>
+
+      <label for="email">Email:</label>
+      <input type="email" name="email" required>
+
+      <button type="submit">Generate OTP</button>
+    </form>
+  </div>
+  <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</body>
+</html>

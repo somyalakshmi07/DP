@@ -1,0 +1,87 @@
+[
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Suraksha D S",
+    "department": "marketing",
+    "otp": "986931",
+    "approved": true,
+    "password": "sanjana28"
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Rashi",
+    "department": "production",
+    "otp": "961565",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "meghana",
+    "department": "marketing",
+    "otp": "481008",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "suchitra",
+    "department": "marketing",
+    "otp": "546591",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Suraksha D S",
+    "department": "production",
+    "otp": "780184",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "suchitra",
+    "department": "production",
+    "otp": "758654",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "sudheer",
+    "department": "production",
+    "otp": "631712",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "sudheer",
+    "department": "production",
+    "otp": "747562",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Ravi",
+    "department": "marketing",
+    "otp": "623296",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Sanvi",
+    "department": "production",
+    "otp": "474450",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Roshini",
+    "department": "production",
+    "otp": "537404",
+    "approved": false
+  },
+  {
+    "email": "suraksha.doijodes@gmail.com",
+    "username": "Sanjana",
+    "department": "production",
+    "otp": "858858",
+    "approved": false
+  }
+]
