@@ -31,8 +31,10 @@ body {
 }
 
 .sidebar .logo img {
-    max-width: 80%;
-    height: auto;
+    width: 90%; /* Use most of the container width */
+    height: 70px; /* Set a fixed height to create a rectangular banner-like shape */
+    object-fit: cover; /* Ensures the image covers the area, cropping if needed */
+    border-radius: 0; /* Ensure no rounded corners */
 }
 
 .sidebar .nav-links {
