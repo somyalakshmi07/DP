@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Summary - {{ fy }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        tr:last-child { font-weight: bold; background-color: #ffeaa7; }
+    </style>
+    <form action="/summary" method="get">
+  <label for="fy">Select Financial Year:</label>
+  <select name="fy" id="fy">
+    <option value="FY22">FY22</option>
+    <option value="FY23">FY23</option>
+    <option value="FY24">FY24</option>
+    <option value="FY25">FY25</option>
+  </select>
+
+  <label for="actual_product">Select Actual Product:</label>
+  <select name="actual_product" id="actual_product">
+    <option value="All">All</option>
+    <option value="GI">GI</option>
+    <option value="GL">GL</option>
+    <option value="PPGL">PPGL</option>
+    <option value="ZM">ZM</option>
+  </select>
+    </form>
+</head>
+<body>
+    <nav>
+        {% if data %}
+<form method="post" action="/export-summary">
+    <input type="hidden" name="fy" value="{{ fy }}">
+    <input type="hidden" name="actual_product" value="{{ actual_product }}">
+    <button type="submit">Export to Excel</button>
+</form>
+
+{% endif %}
+
+
+</nav>
+    <h2>Summary for {{ fy }} (Segment: {{ segment }})</h2>
+<table border="1">
+  <thead>
+    <tr>
+      <th>Actual Product</th>
+      <th>Prop IP Wt</th>
+      <th>O/P Wt</th>
+      <th>Total Length</th>
+      <th>Area</th>
+      <th>Zinc</th>
+      <th>Process Duration (in min)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in data %}
+    <tr>
+      <td>{{ row['Actual Product'] }}</td>
+      <td>{{ row['Prop IP Wt'] }}</td>
+      <td>{{ row['O/P Wt'] }}</td>
+      <td>{{ row['Total Length'] }}</td>
+      <td>{{ row['Area'] }}</td>
+      <td>{{ row['Zinc'] }}</td>
+      <td>{{ row['Process Duration(in min)'] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!-- <h2>Set Username and Password</h2>
+<form method="post">
+    <input type="text" name="username" placeholder="Choose Username" required><br><br>
+    <input type="password" name="password" placeholder="Set Password" required><br><br>
+    <button type="submit">Register</button>
+</form> -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h2>Set Username & Password</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+        <input type="text" name="username" placeholder="Choose Username" required>
+        <input type="password" name="password" placeholder="Set Password" required>
+        <button type="submit">Register</button>
+    </form>
+</div>
+</body>
+</html>

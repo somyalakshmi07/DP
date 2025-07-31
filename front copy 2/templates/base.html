@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} - Company App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <img src="https://tse2.mm.bing.net/th/id/OIP.LDd6F0Pq5y0mb3Zm9-z_qQAAAA?w=300&h=280&rs=1&pid=ImgDetMain&o=7&rm=3" alt="Logo">
+            </div>
+            <nav class="nav-links">
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('production') }}">Production</a>
+                <a href="{{ url_for('productivity') }}">Productivity</a>
+                <!-- Link to the separate Order Punch application -->
+                <a href="{{ url_for('order_punch') }}">Order Punch</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Page-specific scripts -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>
