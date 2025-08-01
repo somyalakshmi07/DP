@@ -1,13 +1,22 @@
-from flask import Flask, request, render_template, send_file, redirect, url_for, jsonify
+from flask import Flask, request, render_template, send_file, redirect, url_for, jsonify, session, flash
 import mysql.connector
 import pandas as pd
 import io 
 from io import BytesIO
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
+import sqlite3
+import random
+import smtplib
+from functools import wraps
+
+# Assuming config.py is in the same directory
+from config import SMTP_SERVER, SMTP_PORT, EMAIL_ADDRESS, EMAIL_PASSWORD, ADMIN_EMAIL, PRODUCTION_HEAD_EMAIL, MARKETING_HEAD_EMAIL
 
 app = Flask(__name__)
+# Secret key is needed for session management and flashing messages
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_very_secret_key_that_should_be_changed_for_production')
 
 # Define the database configuration centrally
 db_config = {
@@ -25,16 +34,262 @@ db_config_orderdata = {
     "database": "order_data"
 }
 
+# ---- START: Enhanced Authentication Code ----
+
+# ---- Utility functions for Authentication ----
+def send_email(receiver, subject, body):
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
+            smtp.starttls()
+            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            msg = f"Subject: {subject}\n\n{body}"
+            smtp.sendmail(EMAIL_ADDRESS, receiver, msg)
+        print(f"Email sent to {receiver}")
+    except Exception as e:
+        print(f"Failed to send email to {receiver}: {e}")
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def get_db_connection(db_name='login.db'):
+    conn = sqlite3.connect(db_name)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            flash('Please login to access this page', 'warning')
+            return redirect(url_for('homelogin'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Initialize database
+def init_db():
+    conn = get_db_connection()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            role TEXT NOT NULL,
+            team TEXT NOT NULL,
+            verified INTEGER DEFAULT 0
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS pending_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            team TEXT NOT NULL,
+            otp TEXT NOT NULL,
+            otp_time TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Routes for authentication
+@app.route('/homelogin', methods=['GET', 'POST'])
+def homelogin():
+    if request.method == 'POST':
+        if 'team' not in request.form or 'email' not in request.form:
+            flash('Please select a team and provide your email', 'danger')
+            return redirect(url_for('homelogin'))
+            
+        team = request.form['team']
+        email = request.form['email']
+
+        # Check if already registered
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+        
+        if user:
+            conn.close()
+            flash('You are already registered. Please log in.', 'info')
+            return redirect(url_for('login'))
+        
+        # Notify admin and head
+        subject = "Login Request Approval"
+        approve_url = f"{request.url_root}approve?email={email}&team={team}"
+        reject_url = f"{request.url_root}reject?email={email}"
+        
+        body = f"""A new user with email {email} is requesting access to the {team} team.
+
+Approve: {approve_url}
+Reject: {reject_url}"""
+        
+        send_email(ADMIN_EMAIL, subject, body)
+        if team == 'production':
+            send_email(PRODUCTION_HEAD_EMAIL, subject, body)
+        else:
+            send_email(MARKETING_HEAD_EMAIL, subject, body)
+
+        conn.close()
+        flash('Request sent. Await admin approval.', 'success')
+        return redirect(url_for('verify', email=email))
+
+    return render_template('homelogin.html')
+
+@app.route('/approve')
+def approve():
+    email = request.args.get('email')
+    team = request.args.get('team')
+    
+    if not email or not team:
+        return "Missing parameters", 400
+        
+    otp = generate_otp()
+    otp_time = datetime.now().isoformat()
+
+    # Save to pending
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO pending_requests (email, team, otp, otp_time) VALUES (?, ?, ?, ?)",
+              (email, team, otp, otp_time))
+    conn.commit()
+    conn.close()
+
+    send_email(email, "OTP for Verification", f"Your OTP is: {otp}\nValid for 5 minutes.")
+    return "Approved! OTP sent to user."
+
+@app.route('/reject')
+def reject():
+    email = request.args.get('email')
+    if not email:
+        return "Missing email parameter", 400
+        
+    send_email(email, "Login Request Rejected", "Your request has been rejected by the admin.")
+    return "Rejected."
+
+@app.route('/verify', methods=['GET', 'POST'])
+def verify():
+    email_prefill = request.args.get('email', '')
+    if request.method == 'POST':
+        if 'email' not in request.form or 'otp' not in request.form:
+            flash('Please fill all fields', 'error')
+            return redirect(url_for('verify'))
+            
+        email = request.form['email']
+        otp = request.form['otp']
+
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT otp, otp_time, team FROM pending_requests WHERE email=?", (email,))
+        record = c.fetchone()
+        conn.close()
+
+        if not record:
+            flash('No OTP found. Try again.', 'error')
+            return redirect(url_for('verify'))
+
+        saved_otp, otp_time_str, team = record
+        otp_time = datetime.fromisoformat(otp_time_str)
+
+        if datetime.now() - otp_time > timedelta(minutes=5):
+            flash('OTP expired.', 'error')
+            return redirect(url_for('verify'))
+
+        if otp == saved_otp:
+            session['email'] = email
+            session['team'] = team
+            return redirect(url_for('register'))
+        else:
+            flash('Invalid OTP.', 'error')
+            return redirect(url_for('verify'))
+            
+    return render_template('otp_verify.html', email=email_prefill)
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if 'email' not in session:
+        flash('Please complete OTP verification first', 'error')
+        return redirect(url_for('homelogin'))
+
+    if request.method == 'POST':
+        if 'username' not in request.form or 'password' not in request.form:
+            flash('Please fill all fields', 'error')
+            return redirect(url_for('register'))
+            
+        username = request.form['username']
+        password = request.form['password']
+
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        try:
+            c.execute("INSERT INTO users (email, username, password, team, role, verified) VALUES (?, ?, ?, ?, 'user', 1)",
+                      (session['email'], username, password, session['team']))
+            c.execute("DELETE FROM pending_requests WHERE email=?", (session['email'],))
+            conn.commit()
+            flash('Registered successfully! Please login.', 'success')
+            session.clear()
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Username already exists. Please choose another.', 'error')
+        finally:
+            conn.close()
+
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if 'username' not in request.form or 'password' not in request.form:
+            flash('Please fill all fields', 'error')
+            return redirect(url_for('login'))
+            
+        username = request.form['username']
+        password = request.form['password']
+
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', 
+                          (username, password)).fetchone()
+        conn.close()
+
+        if user:
+            session['logged_in'] = True
+            session['username'] = username
+            session['role'] = user['role']
+            session['team'] = user['team']
+            flash('Login successful!', 'success')
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid credentials.', 'error')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('homelogin'))
+
+# ---- END: Enhanced Authentication Code ----
+
+# ---- Application Routes ----
+
 @app.route('/')
 def index():
-    # The default page is now the home/welcome page
+    if 'logged_in' not in session:
+        return redirect(url_for('homelogin'))
+    return redirect(url_for('home'))
+
+@app.route('/home')
+@login_required
+def home():
     return render_template('home.html')
 
 @app.route('/production')
+@login_required
 def production():
     return render_template('production.html')
 
 @app.route('/productivity')
+@login_required
 def productivity():
     return render_template("productivity.html")
 
