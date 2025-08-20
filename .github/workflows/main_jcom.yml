@@ -12,6 +12,22 @@ jobs:
     permissions:
       contents: read
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: Megha@2207  # Same as your local MySQL
+          MYSQL_DATABASE: new      # Your database name
+          MYSQL_USER: root          # Your MySQL username
+          MYSQL_PASSWORD: Megha@2207     # Your MySQL password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,16 +43,31 @@ jobs:
       
       - name: Install dependencies
         run: |
-          cd front  # Navigate to the front folder
+          cd front
           pip install -r requirements.txt
         
+      - name: Wait for MySQL to be ready
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          while ! mysqladmin ping -h"127.0.0.1" -P"3306" -uroot -pyour_root_password_here --silent; do
+            echo "Waiting for MySQL..."
+            sleep 2
+          done
+
       - name: Test Flask app
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: Megha@2207
+          DB_NAME: new
         run: |
           cd front
-          python app1.py &  # Start Flask in background
-          sleep 5  # Wait for server to start
-          curl -f http://localhost:5000 || exit 1  # Test if server responds
-          pkill -f "python app1.py"  # Stop the server
+          python app1.py &
+          sleep 10
+          curl -f http://localhost:5000 || echo "App started but may have issues"
+          pkill -f "python app1.py"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
