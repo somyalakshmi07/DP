@@ -30,6 +30,14 @@ jobs:
           cd front  # Navigate to the front folder
           pip install -r requirements.txt
         
+      - name: Test Flask app
+        run: |
+          cd front
+          python app1.py &  # Start Flask in background
+          sleep 5  # Wait for server to start
+          curl -f http://localhost:5000 || exit 1  # Test if server responds
+          pkill -f "python app1.py"  # Stop the server
+
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
