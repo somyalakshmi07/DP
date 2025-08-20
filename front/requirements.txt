@@ -1,0 +1,8 @@
+Flask
+mysql-connector-python
+numpy
+pandas
+requests
+XlsxWriter
+gunicorn
+scikit-learn
