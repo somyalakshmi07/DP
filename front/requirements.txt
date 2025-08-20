@@ -1,8 +1,9 @@
-Flask
-mysql-connector-python
 numpy
 pandas
 requests
 XlsxWriter
-gunicorn
 scikit-learn
+Flask==2.3.3
+mysql-connector-python==8.1.0
+flask-cors==4.0.0
+gunicorn==21.2.0

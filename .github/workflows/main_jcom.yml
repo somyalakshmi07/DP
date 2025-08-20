@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,10 +20,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: Megha@2207  # Same as your local MySQL
-          MYSQL_DATABASE: new      # Your database name
-          MYSQL_USER: root          # Your MySQL username
-          MYSQL_PASSWORD: Megha@2207     # Your MySQL password
+          MYSQL_ROOT_PASSWORD: ${{ env.DB_ROOT_PASSWORD }}  # From GitHub secrets
+          MYSQL_DATABASE: new
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ${{ env.DB_ROOT_PASSWORD }}  # Using root password for testing
         ports:
           - 3306:3306
         options: >-
@@ -50,41 +54,86 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mysql-client
-          while ! mysqladmin ping -h"127.0.0.1" -P"3306" -uroot -pyour_root_password_here --silent; do
-            echo "Waiting for MySQL..."
+          echo "Waiting for MySQL to start..."
+          for i in {1..30}; do
+            if mysqladmin ping -h"127.0.0.1" -P"3306" -uroot -p"$DB_ROOT_PASSWORD" --silent; then
+              echo "MySQL is ready!"
+              break
+            fi
+            echo "Waiting for MySQL... (attempt $i/30)"
             sleep 2
           done
+
+      - name: Initialize test database
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u root -p"$DB_ROOT_PASSWORD" -e "
+          CREATE DATABASE IF NOT EXISTS new;
+          USE new;
+          CREATE TABLE IF NOT EXISTS test_table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO test_table (name) VALUES ('test_user');
+          SELECT * FROM test_table;
+          "
 
       - name: Test Flask app
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_USER: root
-          DB_PASSWORD: Megha@2207
+          DB_PASSWORD: ${{ env.DB_ROOT_PASSWORD }}
           DB_NAME: new
         run: |
           cd front
+          echo "Starting Flask app..."
           python app1.py &
-          sleep 10
-          curl -f http://localhost:5000 || echo "App started but may have issues"
-          pkill -f "python app1.py"
+          FLASK_PID=$!
+          sleep 15  # Give more time for Flask to start
+          
+          echo "Testing Flask app health..."
+          if curl -f http://localhost:5000/health || curl -f http://localhost:5000; then
+            echo "✅ Flask app is running successfully!"
+            curl http://localhost:5000/health || curl http://localhost:5000
+          else
+            echo "❌ Flask app failed to start properly"
+            # Show logs for debugging
+            ps aux | grep python
+            netstat -tulpn | grep :5000 || true
+          fi
+          
+          # Gracefully stop the Flask app
+          kill $FLASK_PID 2>/dev/null || true
+          sleep 2
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
           path: |
-            .
-            !venv/
+            front/
+            !front/venv/
+          retention-days: 1
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    environment: production
+    
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
+          path: .
+      
+      - name: List downloaded files
+        run: |
+          echo "Deployment files:"
+          ls -la
+          echo "Front folder:"
+          ls -la front/ || true
       
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
@@ -93,3 +142,4 @@ jobs:
           app-name: 'jcom'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E056ACC958C64D7289896BA9160CFAA5 }}
+          package: .

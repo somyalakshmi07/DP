@@ -11,28 +11,34 @@ import joblib
 import traceback
 import logging
 from werkzeug.security import generate_password_hash, check_password_hash
-import requests  # Added missing import
+import requests
+from flask_cors import CORS  # Added for CORS support
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Configuration
 app.secret_key = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
 
-# Database configuration
+# Database configuration with environment variables
 db_config = {
     "host": os.getenv('DB_HOST', 'localhost'),
-    "user": os.getenv('DB_USER', 'root'),
+    "port": int(os.getenv('DB_PORT', '3306')),
+    "user": os.getenv('DB_USER', 'appadmin'),
     "password": os.getenv('DB_PASSWORD', 'Megha@2207'),
-    "database": os.getenv('DB_NAME', 'new')
+    "database": os.getenv('DB_NAME', 'new'),
+    "pool_name": "my_pool",
+    "pool_size": 5
 }
 
 # Create connection pool
-db_pool = pooling.MySQLConnectionPool(
-    pool_name="my_pool",
-    pool_size=5,
-    **db_config
-)
+try:
+    db_pool = pooling.MySQLConnectionPool(**db_config)
+    print("✅ Database connection pool created successfully")
+except Exception as e:
+    print(f"❌ Database connection failed: {e}")
+    db_pool = None
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -105,6 +111,19 @@ def get_time_stats(cursor, table):
         'left_time': round(available_time - booked_time, 2)
     }
 
+# Health check endpoint
+@app.route('/health')
+def health():
+    try:
+        if db_pool:
+            connection = db_pool.get_connection()
+            connection.ping(reconnect=True)
+            connection.close()
+            return jsonify({"status": "healthy", "database": "connected"})
+        return jsonify({"status": "healthy", "database": "not connected"})
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
 # Authentication routes
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -141,9 +160,10 @@ def login():
                 conn.close()
     
     return render_template('login.html')
+
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'register', 'static']
+    allowed_routes = ['login', 'register', 'static', 'health', 'home']
     if request.endpoint not in allowed_routes and 'user_id' not in session:
         return redirect(url_for('login'))
     
@@ -152,6 +172,7 @@ def logout():
     session.pop('user_id', None)
     flash('Logged out successfully', 'info')
     return redirect(url_for('login'))
+
 def create_tables_if_not_exist(cursor):
     """Create all required tables if they don't exist"""
     # Create users table
@@ -220,8 +241,13 @@ def register():
                 conn.close()
     
     return render_template('register.html')
+
 # Main routes
 @app.route('/')
+def home():
+    return "🚀 Flask App is Running on Azure!"
+
+@app.route('/index')
 def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -569,7 +595,7 @@ def get_filtered_data():
     conn = None
     try:
         # Use **db_config to unpack the dictionary into keyword arguments
-        conn = mysql.connector.connect(**db_config)
+        conn = db_pool.get_connection()
         # Use a dictionary cursor from the start for both operations
         cursor = conn.cursor(dictionary=True)
 
@@ -657,7 +683,7 @@ def summary():
         fy_number = fy[2:]  # FY25 → 25
         table_name = f"{fy_number}datacsv"
 
-        conn = mysql.connector.connect(**db_config)
+        conn = db_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
 
         # Products to include when "All" is selected
@@ -754,7 +780,7 @@ def export_summary():
             return "Missing filters", 400
 
         table_name = f"{fy[-2:]}datacsv"
-        conn = mysql.connector.connect(**db_config)
+        conn = db_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
 
         product_list = ['GI', 'GL', 'PPGL', 'ZM']
@@ -868,4 +894,4 @@ if __name__ == "__main__":
             conn.close()
     
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
