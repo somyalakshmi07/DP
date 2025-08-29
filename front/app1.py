@@ -129,36 +129,29 @@ def health():
 def login():
     if 'user_id' in session:
         return redirect(url_for('index'))
-    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        conn = None
         try:
             conn = db_pool.get_connection()
             cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+            cursor.execute("SELECT * FROM users WHERE username=%s", (username,))
             user = cursor.fetchone()
-            
-            if user and check_password_hash(user['password_hash'], password):
+            if not user:
+                flash(
+                    f'User does not exist. <a href="{url_for("register")}" style="color:#FB8122;text-decoration:underline;">Register here</a>.',
+                    'error'
+                )
+            elif check_password_hash(user['password_hash'], password):
                 session['user_id'] = user['id']
-                flash('Logged in successfully!', 'success')
                 return redirect(url_for('index'))
             else:
-                flash('Invalid username or password', 'danger')
-                return redirect(url_for('login'))
-                
+                flash('Invalid username or password', 'error')
         except Exception as e:
-            logger.error(f"Login error: {str(e)}")
-            flash('An error occurred during login', 'danger')
-            return redirect(url_for('login'))
+            flash('An error occurred during login', 'error')
         finally:
-            if conn and conn.is_connected():
-                cursor.close()
+            if conn:
                 conn.close()
-    
     return render_template('login.html')
 
 @app.before_request
@@ -245,7 +238,7 @@ def register():
 # Main routes
 @app.route('/')
 def home():
-    return "🚀 Flask App is Running on Azure!"
+    return redirect(url_for('index'))
 
 @app.route('/index')
 def index():
