@@ -1,373 +1,712 @@
-{% extends "base.html" %}
-
-{% block title %}Production Dashboard{% endblock %}
-
-{% block head %}
-
-<style>/* General Body & Layout */
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    margin: 0;
-    background-color: #F5F7FA; /* Light grey background for the content area */
-    color: #333;
-}
-
-.container {
-    display: flex;
-}
-
-/* Sidebar Navigation */
-.sidebar {
-    width: 250px;
-    background-color: #1D2B36; /* Dark blue/grey */
-    color: #E1E2E2;
-    height: 100vh;
-    position: fixed;
-    top: 0;
-    left: 0;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-}
-
-.sidebar .logo {
-    padding: 20px;
-    text-align: center;
-    background-color: #16222A;
-}
-
-.sidebar .logo img {
-    max-width: 80%;
-    height: auto;
-}
-
-.sidebar .nav-links {
-    display: flex;
-    flex-direction: column;
-    margin-top: 20px;
-}
-
-.sidebar .nav-links a {
-    color: #E1E2E2;
-    text-decoration: none;
-    padding: 15px 25px;
-    transition: background-color 0.3s, color 0.3s;
-    border-left: 3px solid transparent;
-}
-
-.sidebar .nav-links a:hover {
-    background-color: #2c3e50;
-    border-left-color: #FB8122;
-}
-
-.sidebar .nav-links a.active {
-    background-color: #FB8122; /* Orange accent */
-    color: #fff;
-    font-weight: 500;
-    border-left-color: #fff;
-}
-
-/* Main Content Area */
-.main-content {
-    margin-left: 250px; /* Same as sidebar width */
-    padding: 30px;
-    width: calc(100% - 250px);
-}
-
-h1, h2, h3 {
-    color: #1D2B36;
-    border-bottom: 2px solid #e1e1e1;
-    padding-bottom: 10px;
-    margin-top: 0;
-    margin-bottom: 20px;
-}
-
-/* --- Page Specific & Reusable Components --- */
-
-/* Filter Bars (Production & Productivity) */
-.selection-menu, .filter-bar {
-    padding: 20px;
-    background-color: #fff;
-    border: 1px solid #e1e1e1;
-    border-radius: 8px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    align-items: center;
-    margin-bottom: 25px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-/* Tables */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    background-color: #fff;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-th, td {
-    padding: 12px 15px;
-    border-bottom: 1px solid #e1e1e1;
-    text-align: left;
-    font-size: 14px;
-    white-space: nowrap;
-}
-
-tr:last-child td {
-    border-bottom: none;
-}
-
-th {
-    background-color: #F5F7FA;
-    font-weight: 600;
-    color: #555;
-    text-transform: uppercase;
-    font-size: 12px;
-}
-
-.excel-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-/* Forms & Inputs */
-.form-card {
-    background-color: #fff;
-    padding: 30px;
-    border-radius: 8px;
-    border: 1px solid #e1e1e1;
-}
-
-.form-card label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-}
-
-.form-card input[type="text"],
-.form-card input[type="number"] {
-    width: calc(100% - 24px);
-    margin-bottom: 20px;
-}
-
-
-label {
-    font-weight: 500;
-}
-
-input[type="text"],
-input[type="date"],
-input[type="number"],
-select {
-    padding: 8px 12px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-    transition: border-color 0.3s;
-}
-
-input[type="text"]:focus,
-input[type="date"]:focus,
-input[type="number"]:focus,
-select:focus {
-    outline: none;
-    border-color: #FB8122;
-}
-
-
-button, .btn {
-    padding: 10px 20px;
-    background-color: #FB8122;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.3s;
-    text-decoration: none;
-    display: inline-block;
-}
-
-button:hover, .btn:hover {
-    background-color: #e56f1c;
-}
-
-/* Order Punch Page Specifics */
-.time-stats {
-    background-color: #fff;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border: 1px solid #e1e1e1;
-    display: flex;
-    gap: 20px;
-    font-weight: 500;
-}
-
-.action-btns {
-    display: flex;
-    gap: 10px;
-}
-
-.action-btns .btn.delete {
-    background: #d32f2f;
-}
-.action-btns .btn.delete:hover {
-    background: #b71c1c;
-}
-
-/* Modal Styling */
-.modal {
-.modal-content h3 { margin-top: 0; }
-.modal-content input { width: 100%; padding: 10px; margin: 5px 0 15px 0; }
-.close { float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
-.close:hover { color: #333; }
-</style>
-{% endblock %}<!-- Page-specific styles can go here if needed in the future -->
-
-{% block content %}
-    <div class="selection-menu">
-        <label>From:</label>
-        <input type="date" name="fromDate">
-
-        <label>To:</label>
-        <input type="date" name="toDate">
-
-        <label>Month:</label>
-        <select name="month">
-            <option value="">All</option>
-            <option value="1">January</option><option value="2">February</option><option value="3">March</option><option value="4">April</option><option value="5">May</option><option value="6">June</option><option value="7">July</option><option value="8">August</option><option value="9">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option>
-        </select>
-
-        <label>Order TDC:</label>
-        <input type="text" name="orderTdc" placeholder="Order TDC">
-
-        <label>FY:</label>
-        <select name="financialYear">
-            <option value="FY22">FY22</option>
-            <option value="FY23">FY23</option>
-            <option value="FY24">FY24</option>
-            <option value="FY25" selected>FY25</option>
-        </select>
-
-        <label>Shift:</label>
-        <select name="shift">
-            <option value="">All</option>
-            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
-        </select>
-
-        <label>Unit:</label>
-        <select name="unit">
-            <option value="">All</option>
-            <option value="cgl1">CGL-1</option>
-            <option value="cgl2">CGL-2</option>
-            <option value="cgl3">CGL-3</option>
-        </select>
-
-        <button type="button" onclick="searchData()">Search</button>
-    </div>
-
-    <div id="results">
-        <!-- Results will be rendered here by JavaScript -->
-    </div>
-
-    <button id="scrollToTopBtn" title="Go to top">Top</button>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    // Function to search and display results
-    async function searchData() {
-        const fromDate = document.querySelector('input[name="fromDate"]').value;
-        const toDate = document.querySelector('input[name="toDate"]').value;
-        const month = document.querySelector('select[name="month"]').value;
-        const orderTdc = document.querySelector('input[name="orderTdc"]').value;
-        const financialYear = document.querySelector('select[name="financialYear"]').value;
-        const shift = document.querySelector('select[name="shift"]').value;
-        const unit = document.querySelector('select[name="unit"]').value;
-
-        const response = await fetch('/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fromDate, toDate, month, orderTdc, financialYear, shift, unit })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            renderResults(data);
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Dashboard</title>
+    <style>
+        /* General Body & Layout */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: #F5F7FA;
+            color: #333;
+            line-height: 1.6;
         }
-    }
 
-    // Function to render the results
-    function renderResults(data) {
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 250px;
+            background-color: #1D2B36;
+            color: #E1E2E2;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .sidebar .logo {
+            padding: 20px;
+            text-align: center;
+            background-color: #16222A;
+            border-bottom: 1px solid #2c3e50;
+        }
+
+        .sidebar .logo h2 {
+            margin: 0;
+            color: #fff;
+            font-size: 1.2rem;
+        }
+
+        .sidebar .nav-links {
+            display: flex;
+            flex-direction: column;
+            margin-top: 20px;
+            flex-grow: 1;
+        }
+
+        .sidebar .nav-links a {
+            color: #E1E2E2;
+            text-decoration: none;
+            padding: 15px 25px;
+            transition: background-color 0.3s, color 0.3s;
+            border-left: 3px solid transparent;
+            display: flex;
+            align-items: center;
+        }
+
+        .sidebar .nav-links a i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .sidebar .nav-links a:hover {
+            background-color: #2c3e50;
+            border-left-color: #FB8122;
+        }
+
+        .sidebar .nav-links a.active {
+            background-color: #FB8122;
+            color: #fff;
+            font-weight: 500;
+            border-left-color: #fff;
+        }
+
+        .sidebar-footer {
+            padding: 15px;
+            border-top: 1px solid #2c3e50;
+            font-size: 0.8rem;
+            text-align: center;
+            color: #9ba2a8;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            margin-left: 250px;
+            padding: 30px;
+            width: calc(100% - 250px);
+            box-sizing: border-box;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e1e1e1;
+        }
+
+        h1, h2, h3 {
+            color: #1D2B36;
+            margin-top: 0;
+        }
+
+        /* Filter Bars */
+        .selection-menu {
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .filter-group input, .filter-group select {
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group input:focus, .filter-group select:focus {
+            outline: none;
+            border-color: #FB8122;
+            box-shadow: 0 0 0 2px rgba(251, 129, 34, 0.2);
+        }
+
+        .search-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* Results Section */
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .results-count {
+            font-weight: 500;
+            color: #555;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1000px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e1e1e1;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            font-size: 12px;
+            position: relative;
+        }
+
+        th:hover {
+            background-color: #e2e8f0;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        /* Buttons */
+        button, .btn {
+            padding: 10px 20px;
+            background-color: #FB8122;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button:hover, .btn:hover {
+            background-color: #e56f1c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        button:active, .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid #FB8122;
+            color: #FB8122;
+        }
+
+        .btn-outline:hover {
+            background-color: #FB8122;
+            color: white;
+        }
+
+        /* Scroll to top button */
+        #scrollToTopBtn {
+            display: none;
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 99;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #FB8122;
+            color: white;
+            font-size: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Loading indicator */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #FB8122;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 5px;
+        }
+
+        .pagination button {
+            min-width: 40px;
+            height: 40px;
+            padding: 0;
+        }
+
+        .pagination button.active {
+            background-color: #1D2B36;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 1024px) {
+            .selection-menu {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+                overflow: hidden;
+            }
+            
+            .sidebar .logo h2, .sidebar .nav-links a span, .sidebar-footer {
+                display: none;
+            }
+            
+            .sidebar .nav-links a {
+                justify-content: center;
+                padding: 15px 0;
+            }
+            
+            .sidebar .nav-links a i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+                width: calc(100% - 70px);
+                padding: 20px;
+            }
+            
+            .selection-menu {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 15px;
+            }
+            
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .search-actions {
+                flex-direction: column;
+            }
+            
+            .search-actions button {
+                width: 100%;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="logo">
+                <h2>Production Dashboard</h2>
+            </div>
+            <nav class="nav-links">
+                 <a href="{{ url_for('index') }}" class="active">Home</a>
+                <a href="{{ url_for('production') }}">Production</a>
+                <a href="{{ url_for('productivity') }}">Productivity</a>
+                <a href="{{ url_for('order_punch') }}">Order Punch</a>
+            </nav>
+            <div class="sidebar-footer">
+                <p>Version 2.1.0</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="page-header">
+                <h1>Production Data</h1>
+                <div class="header-actions">
+                    <button class="btn"><i class="fas fa-download"></i> Export</button>
+                </div>
+            </div>
+
+            <!-- Filter Section -->
+            <div class="selection-menu">
+                <div class="filter-group">
+                    <label for="fromDate">From Date:</label>
+                    <input type="date" id="fromDate" name="fromDate">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="toDate">To Date:</label>
+                    <input type="date" id="toDate" name="toDate">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="month">Month:</label>
+                    <select id="month" name="month">
+                        <option value="">All Months</option>
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="orderTdc">Order TDC:</label>
+                    <input type="text" id="orderTdc" name="orderTdc" placeholder="Order TDC">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="financialYear">FY:</label>
+                    <select id="financialYear" name="financialYear">
+                        <option value="FY22">FY22</option>
+                        <option value="FY23">FY23</option>
+                        <option value="FY24">FY24</option>
+                        <option value="FY25" selected>FY25</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="shift">Shift:</label>
+                    <select id="shift" name="shift">
+                        <option value="">All Shifts</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="unit">Unit:</label>
+                    <select id="unit" name="unit">
+                        <option value="">All Units</option>
+                        <option value="cgl1">CGL-1</option>
+                        <option value="cgl2">CGL-2</option>
+                        <option value="cgl3">CGL-3</option>
+                    </select>
+                </div>
+                
+                <div class="search-actions">
+                    <button class="btn-outline"><i class="fas fa-undo"></i> Reset</button>
+                    <button type="button" class="btn" onclick="searchData()"><i class="fas fa-search"></i> Search</button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-header">
+                <div class="results-count">Showing <span id="resultCount">0</span> records</div>
+                <div class="results-actions">
+                    <button class="btn-outline"><i class="fas fa-columns"></i> Columns</button>
+                </div>
+            </div>
+
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading data...</p>
+            </div>
+
+            <div id="results" class="table-container">
+                <!-- Results will be displayed here -->
+                <p class="no-data">Use the filters above to search for production data</p>
+            </div>
+
+            <div class="pagination" id="pagination">
+                <!-- Pagination will be generated here -->
+            </div>
+        </div>
+
+        <!-- Scroll to Top Button -->
+        <button id="scrollToTopBtn" title="Go to top"><i class="fas fa-arrow-up"></i></button>
+    </div>
+
+    <script>
+        // Configuration
+        const ITEMS_PER_PAGE = 50;
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentData = [];
+
+        // DOM Elements
         const resultsDiv = document.getElementById('results');
-        resultsDiv.innerHTML = '';
+        const paginationDiv = document.getElementById('pagination');
+        const resultCountSpan = document.getElementById('resultCount');
+        const loadingDiv = document.querySelector('.loading');
+        const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 
-        if (data.length === 0) {
-            resultsDiv.innerHTML = '<p>No results found</p>';
-            return;
+        // Function to show loading state
+        function showLoading() {
+            loadingDiv.style.display = 'block';
+            resultsDiv.innerHTML = '';
+            paginationDiv.innerHTML = '';
         }
 
-        const desiredColumnOrder = [
-            "Row", "Actual Product", "Segment", "DP FLAG", "MotherBatchNo", "Ip Width", "Ip Thick",
-            "Mother Ip Wt", "Order_Tdc", "Op Batch No", "Actual Tdc", "Op Thk", "Op Width", "Prop Ip Wt",
-            "O/P_Wt", "Total Length", "Target coating weight", "ZN/AlZn Coating Top", "ZN/AlZn Coating Bot",
-            "Total Zn/AlZn Coating", "Spangle Type", "Tlv Usage", "Tlv Elongation", "SPM Usage",
-            "SPM Elongation", "Entry Baby Wt", "Entry End Cut", "Exit Baby Wt", "Exit End Cut",
-            "Trim Loss", "Total Scrap", "Surface Finish", "Passivation_Type", "Passivation Flag",
-            "Logo", "Liner Marking", "Ip Idm", "Ip Odm", "Cr grade", "Zn theo weight", "Sleeve",
-            "L2 Remarks", "Next Unit", "Status", "Material Yield(%) with Zinc",
-            "Material Yield(%) without Zinc", "Start Date", "Start Time", "End Date", "End Time",
-            "Shift", "Process Duration(in min)", "Pdo Time", "Age(Days)", "PlanThickness",
-            "PlanWidth", "Target Thick", "Target Width", "Anneal Code", "No Of Rolls", "Coil Weight",
-            "Production yield"
-        ];
+        // Function to hide loading state
+        function hideLoading() {
+            loadingDiv.style.display = 'none';
+        }
 
-        let tableHTML = "<table class='excel-table'><thead><tr>";
-        desiredColumnOrder.forEach(col => {
-            tableHTML += `<th>${col}</th>`;
-        });
-        tableHTML += "</tr></thead><tbody>";
+        // Function to search and display results
+        async function searchData(page = 1) {
+            currentPage = page;
+            
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            const month = document.getElementById('month').value;
+            const orderTdc = document.getElementById('orderTdc').value;
+            const financialYear = document.getElementById('financialYear').value;
+            const shift = document.getElementById('shift').value;
+            const unit = document.getElementById('unit').value;
 
-        data.slice(0, 500).forEach(row => {
-            tableHTML += "<tr>";
+            showLoading();
+
+            try {
+                // In a real application, this would be an API call
+                // Simulating API delay for demo purposes
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // For demonstration, we'll use mock data
+                const mockData = generateMockData(223);
+                currentData = mockData;
+                totalPages = Math.ceil(mockData.length / ITEMS_PER_PAGE);
+                
+                renderResults(mockData);
+                renderPagination();
+                
+                resultCountSpan.textContent = mockData.length;
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="error">Error loading data: ${error.message}</p>`;
+                console.error('Search error:', error);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Function to generate mock data for demonstration
+        function generateMockData(count) {
+            const mockData = [];
+            const products = ["GI Sheet", "GL Sheet", "PPGI", "PPGL"];
+            const segments = ["Automotive", "Construction", "Household", "Industrial"];
+            const shifts = ["A", "B", "C"];
+            const units = ["cgl1", "cgl2", "cgl3"];
+            const statuses = ["Completed", "In Progress", "On Hold"];
+            
+            for (let i = 1; i <= count; i++) {
+                mockData.push({
+                    "Row": i,
+                    "Actual Product": products[Math.floor(Math.random() * products.length)],
+                    "Segment": segments[Math.floor(Math.random() * segments.length)],
+                    "DP FLAG": Math.random() > 0.5 ? "Yes" : "No",
+                    "MotherBatchNo": "MB" + Math.floor(10000 + Math.random() * 90000),
+                    "Ip Width": (800 + Math.floor(Math.random() * 600)) + "mm",
+                    "Ip Thick": (0.3 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
+                    "Mother Ip Wt": (5000 + Math.floor(Math.random() * 15000)) + "kg",
+                    "Order_Tdc": "TDC" + Math.floor(100000 + Math.random() * 900000),
+                    "Op Batch No": "OP" + Math.floor(10000 + Math.random() * 90000),
+                    "Actual Tdc": "TDC" + Math.floor(100000 + Math.random() * 900000),
+                    "Op Thk": (0.25 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
+                    "Op Width": (800 + Math.floor(Math.random() * 600)) + "mm",
+                    "Prop Ip Wt": (5000 + Math.floor(Math.random() * 15000)) + "kg",
+                    "O/P_Wt": (4800 + Math.floor(Math.random() * 14500)) + "kg",
+                    "Total Length": (1000 + Math.floor(Math.random() * 2000)) + "m",
+                    "Material Yield(%) with Zinc": (85 + Math.floor(Math.random() * 10)) + "%",
+                    "Material Yield(%) without Zinc": (80 + Math.floor(Math.random() * 12)) + "%",
+                    "Start Date": new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString(),
+                    "Start Time": new Date().toLocaleTimeString(),
+                    "Shift": shifts[Math.floor(Math.random() * shifts.length)],
+                    "Process Duration(in min)": Math.floor(30 + Math.random() * 300),
+                    "Unit": units[Math.floor(Math.random() * units.length)],
+                    "Status": statuses[Math.floor(Math.random() * statuses.length)]
+                });
+            }
+            
+            return mockData;
+        }
+
+        // Function to render the results
+        function renderResults(data) {
+            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, data.length);
+            const pageData = data.slice(startIndex, endIndex);
+            
+            if (pageData.length === 0) {
+                resultsDiv.innerHTML = '<p class="no-data">No results found matching your criteria</p>';
+                return;
+            }
+            
+            const desiredColumnOrder = [
+                "Row", "Actual Product", "Segment", "DP FLAG", "MotherBatchNo", "Ip Width", "Ip Thick",
+                "Mother Ip Wt", "Order_Tdc", "Op Batch No", "Actual Tdc", "Op Thk", "Op Width", "Prop Ip Wt",
+                "O/P_Wt", "Total Length", "Material Yield(%) with Zinc", "Material Yield(%) without Zinc",
+                "Start Date", "Start Time", "Shift", "Process Duration(in min)", "Unit", "Status"
+            ];
+
+            let tableHTML = `<table class='excel-table'>
+                <thead>
+                    <tr>`;
+            
             desiredColumnOrder.forEach(col => {
-                const cellValue = row[col] !== undefined && row[col] !== null ? row[col] : 'N/A';
-                tableHTML += `<td>${cellValue}</td>`;
+                tableHTML += `<th>${col}</th>`;
             });
-            tableHTML += "</tr>";
-        });
-
-        tableHTML += "</tbody></table>";
-        resultsDiv.innerHTML = tableHTML;
-    }
-
-    // Scroll to Top button visibility and action
-    window.onscroll = function() {
-        const scrollToTopBtn = document.getElementById("scrollToTopBtn");
-        if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-            scrollToTopBtn.style.display = "block";
-        } else {
-            scrollToTopBtn.style.display = "none";
+            
+            tableHTML += `</tr>
+                </thead>
+                <tbody>`;
+            
+            pageData.forEach(row => {
+                tableHTML += "<tr>";
+                desiredColumnOrder.forEach(col => {
+                    const cellValue = row[col] !== undefined && row[col] !== null ? row[col] : 'N/A';
+                    tableHTML += `<td>${cellValue}</td>`;
+                });
+                tableHTML += "</tr>";
+            });
+            
+            tableHTML += "</tbody></table>";
+            resultsDiv.innerHTML = tableHTML;
         }
-    };
 
-    document.getElementById("scrollToTopBtn").onclick = function() {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-    };
+        // Function to render pagination controls
+        function renderPagination() {
+            if (totalPages <= 1) {
+                paginationDiv.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '';
+            
+            // Previous button
+            paginationHTML += `<button class="btn-outline" ${currentPage === 1 ? 'disabled' : ''} onclick="searchData(${currentPage - 1})">
+                <i class="fas fa-chevron-left"></i>
+            </button>`;
+            
+            // Page numbers
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, startPage + 4);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `<button class="${i === currentPage ? 'active' : 'btn-outline'}" onclick="searchData(${i})">${i}</button>`;
+            }
+            
+            // Next button
+            paginationHTML += `<button class="btn-outline" ${currentPage === totalPages ? 'disabled' : ''} onclick="searchData(${currentPage + 1})">
+                <i class="fas fa-chevron-right"></i>
+            </button>`;
+            
+            paginationDiv.innerHTML = paginationHTML;
+        }
 
-    // Run the initial search on page load
-    window.addEventListener('load', () => {
-        searchData();
-    });
-</script>
-{% endblock %}
+        // Scroll to Top button visibility and action
+        window.onscroll = function() {
+            if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+                scrollToTopBtn.style.display = "block";
+            } else {
+                scrollToTopBtn.style.display = "none";
+            }
+        };
+
+        scrollToTopBtn.onclick = function() {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        };
+
+        // Initialize date inputs with default values
+        function initializeDates() {
+            const today = new Date();
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            
+            document.getElementById('fromDate').valueAsDate = firstDayOfMonth;
+            document.getElementById('toDate').valueAsDate = today;
+        }
+
+        // Run the initial setup when page loads
+        window.addEventListener('load', () => {
+            initializeDates();
+            // Don't automatically search on load to avoid overwhelming with data
+            resultsDiv.innerHTML = '<p class="no-data">Adjust filters and click "Search" to load data</p>';
+        });
+    </script>
+</body>
+</html>

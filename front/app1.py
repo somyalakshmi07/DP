@@ -22,14 +22,12 @@ CORS(app)  # Enable CORS for all routes
 app.secret_key = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
 
 # Database configuration with environment variables
-db_config = {
-    "host": os.getenv('DB_HOST', 'localhost'),
-    "port": int(os.getenv('DB_PORT', '3306')),
-    "user": os.getenv('DB_USER', 'appadmin'),
-    "password": os.getenv('DB_PASSWORD', 'Megha@2207'),
-    "database": os.getenv('DB_NAME', 'new'),
-    "pool_name": "my_pool",
-    "pool_size": 5
+db_config =  {
+    "host": "localhost",
+    "user": "root",  # <-- change to your local MySQL user
+    "password": "Megha@2207",  # <-- change to your local MySQL password
+    "database": "new",
+    "port": 3306
 }
 
 # Create connection pool
@@ -127,42 +125,57 @@ def health():
 # Authentication routes
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # If user is already logged in, redirect to home page
     if 'user_id' in session:
         return redirect(url_for('index'))
+
+    if db_pool is None:
+        flash('Database connection is not available. Please contact admin.', 'error')
+        return render_template('login.html')
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        conn = None
         try:
             conn = db_pool.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SELECT * FROM users WHERE username=%s", (username,))
             user = cursor.fetchone()
+
             if not user:
-                flash(
-                    f'User does not exist. <a href="{url_for("register")}" style="color:#FB8122;text-decoration:underline;">Register here</a>.',
-                    'error'
-                )
-            elif check_password_hash(user['password_hash'], password):
+                flash('User does not exist. Please register first.', 'error')
+                return render_template('login.html')
+
+            if check_password_hash(user['password_hash'], password):
+                # Set session variables
                 session['user_id'] = user['id']
+                session['username'] = user['username']
+                flash('Login successful!', 'success')
+                
+                # Redirect to index route which will serve home.html
                 return redirect(url_for('index'))
             else:
                 flash('Invalid username or password', 'error')
         except Exception as e:
+            logger.error(f"Login error: {str(e)}")
             flash('An error occurred during login', 'error')
         finally:
-            if conn:
+            if conn and hasattr(conn, 'is_connected') and conn.is_connected():
                 conn.close()
+
     return render_template('login.html')
 
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'register', 'static', 'health', 'home']
+    allowed_routes = ['login', 'register', 'static', 'health']
     if request.endpoint not in allowed_routes and 'user_id' not in session:
         return redirect(url_for('login'))
     
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
+    session.pop('username', None)
     flash('Logged out successfully', 'info')
     return redirect(url_for('login'))
 
@@ -196,11 +209,11 @@ def register():
         # Validate inputs
         if not username or not password:
             flash('Username and password are required', 'danger')
-            return redirect(url_for('register'))
+            return render_template('register.html')
         
         if password != confirm_password:
             flash('Passwords do not match', 'danger')
-            return redirect(url_for('register'))
+            return render_template('register.html')
         
         conn = None
         try:
@@ -211,7 +224,7 @@ def register():
             cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
             if cursor.fetchone():
                 flash('Username already exists', 'danger')
-                return redirect(url_for('register'))
+                return render_template('register.html')
             
             # Create new user
             password_hash = generate_password_hash(password)
@@ -227,7 +240,7 @@ def register():
         except Exception as e:
             logger.error(f"Registration error: {str(e)}")
             flash('An error occurred during registration', 'danger')
-            return redirect(url_for('register'))
+            return render_template('register.html')
         finally:
             if conn and conn.is_connected():
                 cursor.close()
@@ -244,7 +257,7 @@ def home():
 def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template('base.html')
+    return render_template('home.html', username=session.get('username', 'User'))
 
 @app.route('/production')
 def production():

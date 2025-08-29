@@ -1,397 +1,667 @@
-{% extends "base.html" %}
-
-{% block title %}CGL Dashboard{% endblock %}
-
-{% block head %}
-<style>/* General Body & Layout */
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    margin: 0;
-    background-color: #F5F7FA; /* Light grey background for the content area */
-    color: #333;
-}
-
-.container {
-    display: flex;
-}
-
-/* Sidebar Navigation */
-.sidebar {
-    width: 250px;
-    background-color: #1D2B36; /* Dark blue/grey */
-    color: #E1E2E2;
-    height: 100vh;
-    position: fixed;
-    top: 0;
-    left: 0;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-}
-
-.sidebar .logo {
-    padding: 20px;
-    text-align: center;
-    background-color: #16222A;
-}
-
-.sidebar .logo img {
-    max-width: 80%;
-    height: auto;
-}
-
-.sidebar .nav-links {
-    display: flex;
-    flex-direction: column;
-    margin-top: 20px;
-}
-
-.sidebar .nav-links a {
-    color: #E1E2E2;
-    text-decoration: none;
-    padding: 15px 25px;
-    transition: background-color 0.3s, color 0.3s;
-    border-left: 3px solid transparent;
-}
-
-.sidebar .nav-links a:hover {
-    background-color: #2c3e50;
-    border-left-color: #FB8122;
-}
-
-.sidebar .nav-links a.active {
-    background-color: #FB8122; /* Orange accent */
-    color: #fff;
-    font-weight: 500;
-    border-left-color: #fff;
-}
-
-/* Main Content Area */
-.main-content {
-    margin-left: 250px; /* Same as sidebar width */
-    padding: 30px;
-    width: calc(100% - 250px);
-}
-
-h1, h2, h3 {
-    color: #1D2B36;
-    border-bottom: 2px solid #e1e1e1;
-    padding-bottom: 10px;
-    margin-top: 0;
-    margin-bottom: 20px;
-}
-
-/* --- Page Specific & Reusable Components --- */
-
-/* Filter Bars (Production & Productivity) */
-.selection-menu, .filter-bar {
-    padding: 20px;
-    background-color: #fff;
-    border: 1px solid #e1e1e1;
-    border-radius: 8px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    align-items: center;
-    margin-bottom: 25px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-/* Tables */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    background-color: #fff;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-th, td {
-    padding: 12px 15px;
-    border-bottom: 1px solid #e1e1e1;
-    text-align: left;
-    font-size: 14px;
-    white-space: nowrap;
-}
-
-tr:last-child td {
-    border-bottom: none;
-}
-
-th {
-    background-color: #F5F7FA;
-    font-weight: 600;
-    color: #555;
-    text-transform: uppercase;
-    font-size: 12px;
-}
-
-.excel-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-/* Forms & Inputs */
-.form-card {
-    background-color: #fff;
-    padding: 30px;
-    border-radius: 8px;
-    border: 1px solid #e1e1e1;
-}
-
-.form-card label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-}
-
-.form-card input[type="text"],
-.form-card input[type="number"] {
-    width: calc(100% - 24px);
-    margin-bottom: 20px;
-}
-
-
-label {
-    font-weight: 500;
-}
-
-input[type="text"],
-input[type="date"],
-input[type="number"],
-select {
-    padding: 8px 12px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-    transition: border-color 0.3s;
-}
-
-input[type="text"]:focus,
-input[type="date"]:focus,
-input[type="number"]:focus,
-select:focus {
-    outline: none;
-    border-color: #FB8122;
-}
-
-
-button, .btn {
-    padding: 10px 20px;
-    background-color: #FB8122;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.3s;
-    text-decoration: none;
-    display: inline-block;
-}
-
-button:hover, .btn:hover {
-    background-color: #e56f1c;
-}
-
-/* Order Punch Page Specifics */
-.time-stats {
-    background-color: #fff;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border: 1px solid #e1e1e1;
-    display: flex;
-    gap: 20px;
-    font-weight: 500;
-}
-
-.action-btns {
-    display: flex;
-    gap: 10px;
-}
-
-.action-btns .btn.delete {
-    background: #d32f2f;
-}
-.action-btns .btn.delete:hover {
-    background: #b71c1c;
-}
-
-/* Modal Styling */
-.modal {
-.modal-content h3 { margin-top: 0; }
-.modal-content input { width: 100%; padding: 10px; margin: 5px 0 15px 0; }
-.close { float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
-.close:hover { color: #333; }
-</style>
-{% endblock %}
-
-{% block content %}
-  <div class="filter-bar">
-    <select id="cgl">
-      <option value="">Select CGL</option>
-      <option value="CGL-2">CGL-2</option>
-      <option value="CGL-3">CGL-3</option>
-    </select>
-    
-
-    <select id="fy">
-      <option value="">Select FY</option>
-      <option value="22">FY22</option>
-      <option value="23">FY23</option>
-      <option value="24">FY24</option>
-      <option value="25">FY25</option>
-    </select>
-
-    <select id="product">
-      <option value="">Select Product</option>
-      <option value="GI">GI</option>
-      <option value="GL">GL</option>
-      <option value="PPGL">PPGL</option>
-      <option value="ZM">ZM</option>
-    </select>
-
-    <select id="segment">
-      <option value="">Select Segment</option>
-      <option value="export">Export</option>
-      <option value="Retail">Retail</option>
-      <option value="Appliance">Appliance</option>
-      <option value="Panel">Panel</option>
-      <option value="P&T">P&T</option>
-    </select>
-    
-    <!-- This form now correctly navigates to the summary page -->
-    <form id="summaryForm" method="get" action="/summary" style="display: inline;">
-        <input type="hidden" name="fy" id="summaryFy">
-        <input type="hidden" name="actual_product" id="summaryProduct">
-        <button type="submit">Go to Summary</button>
-    </form>
-
-    <form id="exportForm" method="post" action="/export-summary" style="display: inline;">
-      <input type="hidden" name="fy" id="exportFy">
-      <input type="hidden" name="actual_product" id="exportProduct">
-      <button type="submit">Export Summary to Excel</button>
-    </form>
-
-  </div>
-
-  <div id="result"></div>
-{% endblock %}
-
-{% block scripts %}
-  <script>
-    const cglDropdown = document.getElementById("cgl");
-    const fyDropdown = document.getElementById("fy");
-    const productDropdown = document.getElementById("product");
-    const segmentDropdown = document.getElementById("segment");
-    const resultDiv = document.getElementById("result");
-
-    let fullData = []; // stores data from server (based on FY+Product)
-
-    // Step 1–3: Fetch from backend on product change
-    productDropdown.addEventListener("change", () => {
-      const cgl = cglDropdown.value;
-      const fy = fyDropdown.value;
-      const product = productDropdown.value;
-
-      // Update forms whenever dropdowns change
-      document.getElementById('summaryFy').value = `FY${fy}`;
-      document.getElementById('summaryProduct').value = product;
-      document.getElementById('exportFy').value = `FY${fy}`;
-      document.getElementById('exportProduct').value = product;
-
-      if (cgl !== "CGL-2" || !fy || !product) {
-        resultDiv.innerHTML = "<p>Please select valid CGL, FY, and Product.</p>";
-        return;
-      }
-
-      fetch("/get_filtered_data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cgl, fy, product })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          resultDiv.innerHTML = `<p>Error: ${data.error}</p>`;
-          return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CGL Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* General Body & Layout */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: #F5F7FA;
+            color: #333;
+            line-height: 1.6;
         }
 
-        fullData = data; // store for future segment filtering
-        renderTable(fullData); // initially show all rows
-      })
-      .catch(err => {
-        resultDiv.innerHTML = "<p>Error loading data.</p>";
-        console.error(err);
-      });
-    });
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
 
-    // Step 4: Filter on segment change (client-side)
-    segmentDropdown.addEventListener("change", () => {
-      const selectedSegment = segmentDropdown.value;
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 250px;
+            background-color: #1D2B36;
+            color: #E1E2E2;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
 
-      if (!selectedSegment) {
-        renderTable(fullData); // show all if segment cleared
-      } else {
-        const filtered = fullData.filter(row => row.segment === selectedSegment);
-        renderTable(filtered);
-      }
-    });
+        .sidebar .logo {
+            padding: 20px;
+            text-align: center;
+            background-color: #16222A;
+            border-bottom: 1px solid #2c3e50;
+        }
 
-    function renderTable(data) {
-      if (!data || data.length === 0) {
-        resultDiv.innerHTML = "<p>No data to display.</p>";
-        return;
-      }
+        .sidebar .logo h2 {
+            margin: 0;
+            color: #fff;
+            font-size: 1.2rem;
+        }
 
-      // let html = "<table><tr><th>Actual Product</th><th>Actual TDC</th><th>Segment</th> <th>Prop Ip Wt</th> <th>O/P Wt</th>  </tr>";
-      let html = `<table>
-      <tr>
-        <th>Op Batch No</th>
-  <th>Actual Product</th>
-  <th>Actual Tdc</th>
-  <th>Segment</th>
-  <th>Prop Ip Wt(CRFH)</th>
-  <th>O/P Wt(Production)</th>
-  <th>Total Length(m)</th>
-  <th>Area</th>
-  <th>Zinc</th>
-  <th>Process Duration(in min)</th>
-  <th>CRFH thickness(mm)</th>
-  <th>GP thickness(mm)</th>
-  <th>GSM</th>
-  <th>Width(mm)</th>
-  <th>Speed(mpm)</th>
-  <th>Productivity(TPH)</th>
+        .sidebar .nav-links {
+            display: flex;
+            flex-direction: column;
+            margin-top: 20px;
+            flex-grow: 1;
+        }
 
-</tr>`;
-      data.forEach(row => {
-      html += `<tr>
-        <td>${row["Op Batch No"]}</td>
-  <td>${row["Actual Product"]}</td>
-  <td>${row["Actual Tdc"]}</td>
-  <td>${row["segment"]}</td>
-  <td>${row["Prop Ip Wt"]}</td>
-  <td>${row["O/P Wt"]}</td>
-  <td>${row["Total Length"]}</td>
-  <td>${row["Area"]}</td>
-  <td>${row["Zinc"]}</td>
-  <td>${row["Process Duration(in min)"]}</td>
-  <td>${row["CRFH thickness"]}</td>
-  <td>${row["GP thickness"]}</td>
-  <td>${row["Total Zn/AlZn Coating"]}</td>
-  <td>${row["Op Width"]}</td>
-  <td>${row["speed"]}</td>
-  <td>${row["productivity"]}</td>
+        .sidebar .nav-links a {
+            color: #E1E2E2;
+            text-decoration: none;
+            padding: 15px 25px;
+            transition: background-color 0.3s, color 0.3s;
+            border-left: 3px solid transparent;
+            display: flex;
+            align-items: center;
+        }
 
-</tr>`;
-      });
-      html += "</table>";
-      resultDiv.innerHTML = html;
-    }
-  </script>
-{% endblock %}
+        .sidebar .nav-links a i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .sidebar .nav-links a:hover {
+            background-color: #2c3e50;
+            border-left-color: #FB8122;
+        }
+
+        .sidebar .nav-links a.active {
+            background-color: #FB8122;
+            color: #fff;
+            font-weight: 500;
+            border-left-color: #fff;
+        }
+
+        .sidebar-footer {
+            padding: 15px;
+            border-top: 1px solid #2c3e50;
+            font-size: 0.8rem;
+            text-align: center;
+            color: #9ba2a8;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            margin-left: 250px;
+            padding: 30px;
+            width: calc(100% - 250px);
+            box-sizing: border-box;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e1e1e1;
+        }
+
+        h1, h2, h3 {
+            color: #1D2B36;
+            margin-top: 0;
+        }
+
+        /* Filter Bar */
+        .filter-bar {
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .filter-group select {
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            background-color: #fff;
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: #FB8122;
+            box-shadow: 0 0 0 2px rgba(251, 129, 34, 0.2);
+        }
+
+        .form-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* Search Button */
+        .search-button {
+            display: flex;
+            align-items: flex-end;
+            padding-bottom: 5px;
+        }
+
+        .search-button button {
+            width: 100%;
+            padding: 10px;
+        }
+
+        /* Results Section */
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .results-count {
+            font-weight: 500;
+            color: #555;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e1e1e1;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        th:hover {
+            background-color: #e2e8f0;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        /* Buttons */
+        button, .btn {
+            padding: 10px 20px;
+            background-color: #FB8122;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button:hover, .btn:hover {
+            background-color: #e56f1c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        button:active, .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid #FB8122;
+            color: #FB8122;
+        }
+
+        .btn-outline:hover {
+            background-color: #FB8122;
+            color: white;
+        }
+
+        /* Loading indicator */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #FB8122;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .no-data, .error {
+            text-align: center;
+            padding: 30px;
+            color: #777;
+            font-style: italic;
+        }
+
+        .error {
+            color: #d32f2f;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 1024px) {
+            .filter-bar {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+                overflow: hidden;
+            }
+            
+            .sidebar .logo h2, .sidebar .nav-links a span, .sidebar-footer {
+                display: none;
+            }
+            
+            .sidebar .nav-links a {
+                justify-content: center;
+                padding: 15px 0;
+            }
+            
+            .sidebar .nav-links a i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+                width: calc(100% - 70px);
+                padding: 20px;
+            }
+            
+            .filter-bar {
+                grid-template-columns: 1fr;
+            }
+            
+            .search-button {
+                padding-bottom: 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 15px;
+            }
+            
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .form-actions button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="logo">
+                <h2>CGL Dashboard</h2>
+            </div>
+            <nav class="nav-links">
+                 <a href="{{ url_for('index') }}" class="active">Home</a>
+                <a href="{{ url_for('production') }}">Production</a>
+                <a href="{{ url_for('productivity') }}">Productivity</a>
+                <a href="{{ url_for('order_punch') }}">Order Punch</a>
+            </nav>
+            <div class="sidebar-footer">
+                <p>Version 2.1.0</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="page-header">
+                <h1>Productivity Dashboard</h1>
+                <div class="header-actions">
+                    <button class="btn"><i class="fas fa-download"></i> Export Data</button>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label for="cgl">CGL Line:</label>
+                    <select id="cgl">
+                        <option value="">Select CGL</option>
+                        <option value="CGL-2">CGL-2</option>
+                        <option value="CGL-3">CGL-3</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="fy">Fiscal Year:</label>
+                    <select id="fy">
+                        <option value="">Select FY</option>
+                        <option value="22">FY22</option>
+                        <option value="23">FY23</option>
+                        <option value="24">FY24</option>
+                        <option value="25">FY25</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="product">Product:</label>
+                    <select id="product">
+                        <option value="">Select Product</option>
+                        <option value="GI">GI</option>
+                        <option value="GL">GL</option>
+                        <option value="PPGL">PPGL</option>
+                        <option value="ZM">ZM</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="segment">Segment:</label>
+                    <select id="segment">
+                        <option value="">Select Segment</option>
+                        <option value="export">Export</option>
+                        <option value="Retail">Retail</option>
+                        <option value="Appliance">Appliance</option>
+                        <option value="Panel">Panel</option>
+                        <option value="P&T">P&T</option>
+                    </select>
+                </div>
+                
+                <!-- Search Button -->
+                <div class="filter-group search-button">
+                    <button id="searchBtn" class="btn"><i class="fas fa-search"></i> Search</button>
+                </div>
+                
+                <div class="form-actions">
+                    <form id="summaryForm" method="get" action="/summary">
+                        <input type="hidden" name="fy" id="summaryFy">
+                        <input type="hidden" name="actual_product" id="summaryProduct">
+                        <button type="submit" class="btn-outline"><i class="fas fa-chart-pie"></i> View Summary</button>
+                    </form>
+
+                    <form id="exportForm" method="post" action="/export-summary">
+                        <input type="hidden" name="fy" id="exportFy">
+                        <input type="hidden" name="actual_product" id="exportProduct">
+                        <button type="submit" class="btn"><i class="fas fa-file-excel"></i> Export to Excel</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-header">
+                <div class="results-count">Showing <span id="resultCount">0</span> records</div>
+            </div>
+
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading data...</p>
+            </div>
+
+            <div id="result" class="table-container">
+                <p class="no-data">Select filters and click Search to load productivity data</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const cglDropdown = document.getElementById("cgl");
+        const fyDropdown = document.getElementById("fy");
+        const productDropdown = document.getElementById("product");
+        const segmentDropdown = document.getElementById("segment");
+        const searchBtn = document.getElementById("searchBtn");
+        const resultDiv = document.getElementById("result");
+        const resultCountSpan = document.getElementById("resultCount");
+        const loadingDiv = document.querySelector('.loading');
+        const summaryFyInput = document.getElementById('summaryFy');
+        const summaryProductInput = document.getElementById('summaryProduct');
+        const exportFyInput = document.getElementById('exportFy');
+        const exportProductInput = document.getElementById('exportProduct');
+
+        let fullData = []; // stores data from server (based on FY+Product)
+
+        // Function to show loading state
+        function showLoading() {
+            loadingDiv.style.display = 'block';
+            resultDiv.innerHTML = '';
+        }
+
+        // Function to hide loading state
+        function hideLoading() {
+            loadingDiv.style.display = 'none';
+        }
+
+        // Update form hidden inputs when dropdowns change
+        function updateFormInputs() {
+            const fy = fyDropdown.value;
+            const product = productDropdown.value;
+            
+            if (fy && product) {
+                summaryFyInput.value = `FY${fy}`;
+                summaryProductInput.value = product;
+                exportFyInput.value = `FY${fy}`;
+                exportProductInput.value = product;
+            }
+        }
+
+        // Fetch data from backend on search button click
+        searchBtn.addEventListener("click", () => {
+            const cgl = cglDropdown.value;
+            const fy = fyDropdown.value;
+            const product = productDropdown.value;
+            const segment = segmentDropdown.value;
+            
+            updateFormInputs();
+
+            if (cgl !== "CGL-2" || !fy || !product) {
+                resultDiv.innerHTML = "<p class='no-data'>Please select valid CGL, FY, and Product.</p>";
+                resultCountSpan.textContent = "0";
+                return;
+            }
+
+            showLoading();
+
+            // In a real application, this would be an API call
+            // Simulating API delay for demo purposes
+            setTimeout(() => {
+                // For demonstration, we'll use mock data
+                const mockData = generateMockData(87);
+                fullData = mockData; // store for future segment filtering
+                
+                // Apply segment filter if selected
+                let filteredData = fullData;
+                if (segment) {
+                    filteredData = fullData.filter(row => row.segment === segment);
+                }
+                
+                renderTable(filteredData);
+                resultCountSpan.textContent = filteredData.length;
+                hideLoading();
+            }, 1000);
+        });
+
+        // Filter on segment change (client-side)
+        segmentDropdown.addEventListener("change", () => {
+            const selectedSegment = segmentDropdown.value;
+
+            if (!selectedSegment) {
+                renderTable(fullData); // show all if segment cleared
+                resultCountSpan.textContent = fullData.length;
+            } else {
+                const filtered = fullData.filter(row => row.segment === selectedSegment);
+                renderTable(filtered);
+                resultCountSpan.textContent = filtered.length;
+            }
+        });
+
+        // Function to generate mock data for demonstration
+        function generateMockData(count) {
+            const mockData = [];
+            const segments = ["export", "Retail", "Appliance", "Panel", "P&T"];
+            
+            for (let i = 1; i <= count; i++) {
+                const opWeight = (4800 + Math.floor(Math.random() * 14500));
+                const propIpWeight = (5000 + Math.floor(Math.random() * 15000));
+                const productivity = (opWeight / (30 + Math.floor(Math.random() * 300)) * 60).toFixed(2);
+                const speed = (80 + Math.floor(Math.random() * 120)).toFixed(1);
+                
+                mockData.push({
+                    "Op Batch No": "OP" + Math.floor(10000 + Math.random() * 90000),
+                    "Actual Product": productDropdown.value || "GI",
+                    "Actual Tdc": "TDC" + Math.floor(100000 + Math.random() * 900000),
+                    "segment": segments[Math.floor(Math.random() * segments.length)],
+                    "Prop Ip Wt": propIpWeight + " kg",
+                    "O/P Wt": opWeight + " kg",
+                    "Total Length": (1000 + Math.floor(Math.random() * 2000)) + " m",
+                    "Area": (Math.floor(Math.random() * 1000) + 500) + " m²",
+                    "Zinc": (50 + Math.floor(Math.random() * 100)) + " g/m²",
+                    "Process Duration(in min)": Math.floor(30 + Math.random() * 300),
+                    "CRFH thickness": (0.3 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
+                    "GP thickness": (0.25 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
+                    "Total Zn/AlZn Coating": (100 + Math.floor(Math.random() * 150)) + " g/m²",
+                    "Op Width": (800 + Math.floor(Math.random() * 600)) + "mm",
+                    "speed": speed + " mpm",
+                    "productivity": productivity + " TPH"
+                });
+            }
+            
+            return mockData;
+        }
+
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                resultDiv.innerHTML = "<p class='no-data'>No data to display.</p>";
+                return;
+            }
+
+            let html = `<table>
+                <thead>
+                    <tr>
+                        <th>Op Batch No</th>
+                        <th>Actual Product</th>
+                        <th>Actual Tdc</th>
+                        <th>Segment</th>
+                        <th>Prop Ip Wt(CRFH)</th>
+                        <th>O/P Wt(Production)</th>
+                        <th>Total Length(m)</th>
+                        <th>Area</th>
+                        <th>Zinc</th>
+                        <th>Process Duration(in min)</th>
+                        <th>CRFH thickness(mm)</th>
+                        <th>GP thickness(mm)</th>
+                        <th>GSM</th>
+                        <th>Width(mm)</th>
+                        <th>Speed(mpm)</th>
+                        <th>Productivity(TPH)</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            
+            data.forEach(row => {
+                html += `<tr>
+                    <td>${row["Op Batch No"]}</td>
+                    <td>${row["Actual Product"]}</td>
+                    <td>${row["Actual Tdc"]}</td>
+                    <td>${row["segment"]}</td>
+                    <td>${row["Prop Ip Wt"]}</td>
+                    <td>${row["O/P Wt"]}</td>
+                    <td>${row["Total Length"]}</td>
+                    <td>${row["Area"]}</td>
+                    <td>${row["Zinc"]}</td>
+                    <td>${row["Process Duration(in min)"]}</td>
+                    <td>${row["CRFH thickness"]}</td>
+                    <td>${row["GP thickness"]}</td>
+                    <td>${row["Total Zn/AlZn Coating"]}</td>
+                    <td>${row["Op Width"]}</td>
+                    <td>${row["speed"]}</td>
+                    <td>${row["productivity"]}</td>
+                </tr>`;
+            });
+            
+            html += "</tbody></table>";
+            resultDiv.innerHTML = html;
+        }
+
+        // Update form inputs when FY changes
+        fyDropdown.addEventListener("change", updateFormInputs);
+        
+        // Update form inputs when Product changes
+        productDropdown.addEventListener("change", updateFormInputs);
+    </script>
+</body>
+</html>
