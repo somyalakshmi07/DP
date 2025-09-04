@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Production Planning System for intelligent time allocation and booking">
+    <title>Production Planning System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --light-color: #ecf0f1;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--light-color);
+        }
+        
+        .time-display {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .results-table {
+            margin-top: 30px;
+        }
+        
+        .sample-values {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-success {
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
+        .btn-danger {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+        
+        .btn-warning {
+            background-color: var(--warning-color);
+            border-color: var(--warning-color);
+            color: white;
+        }
+        
+        .table th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .filter-section {
+            background-color: var(--light-color);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .booking-alert {
+            transition: all 0.3s ease;
+        }
+        
+        .action-buttons .btn {
+            margin-right: 5px;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .time-display .col-md-3 {
+                margin-bottom: 15px;
+                text-align: center;
+            }
+            
+            .btn-lg {
+                padding: 0.5rem 1rem;
+                font-size: 1rem;
+            }
+            
+            .action-buttons {
+                white-space: nowrap;
+            }
+            
+            .table-responsive {
+                font-size: 0.85rem;
+            }
+        }
+        
+        /* Loading indicator */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header" aria-labelledby="main-heading">
+            <h1 id="main-heading"><i class="bi bi-calendar-check" aria-hidden="true"></i> Production Planning System</h1>
+            <p class="text-muted">Plan your production with intelligent time allocation and booking</p>
+        </header>
+
+        <!-- Time Display Section -->
+        <section aria-labelledby="time-display-heading">
+            <h2 id="time-display-heading" class="visually-hidden">Time Allocation</h2>
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="time-display">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <h3>Available Time</h3>
+                                <p id="available-time" class="display-4">{{ available_time }}</p>
+                                <small>hours</small>
+                            </div>
+                            <div class="col-md-3">
+                                <h3>Booked Time</h3>
+                                <p id="booked-time" class="display-4">{{ booked_time }}</p>
+                                <small>hours</small>
+                            </div>
+                            <div class="col-md-3">
+                                <h3>Remaining Time</h3>
+                                <p id="remaining-time" class="display-4">{{ remaining_time }}</p>
+                                <small>hours</small>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-center justify-content-center">
+                                <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#timeModal" aria-label="Edit available time">
+                                    <i class="bi bi-pencil" aria-hidden="true"></i> Edit Available Time
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Section -->
+        <section class="filter-section" aria-labelledby="filter-heading">
+            <h2 id="filter-heading" class="visually-hidden">Filters</h2>
+            <div class="row align-items-end">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="month-select"><i class="bi bi-calendar-month" aria-hidden="true"></i> Select Month</label>
+                        <select class="form-control" id="month-select" aria-label="Select month to view orders">
+                            {% for month in months %}
+                            <option value="{{ month }}" {% if month == current_month %}selected{% endif %}>{{ month }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6 text-md-end mt-2 mt-md-0">
+                    <button class="btn btn-success" id="export-btn" aria-label="Export to Excel">
+                        <i class="bi bi-file-earmark-excel" aria-hidden="true"></i> Export to Excel
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Booking Alert -->
+        <div id="booking-alert" class="alert booking-alert" role="alert" aria-live="polite" style="display: none;">
+            <i class="bi bi-info-circle" aria-hidden="true"></i> <span id="alert-message"></span>
+        </div>
+
+        <!-- Prediction Form -->
+        <section aria-labelledby="prediction-heading">
+            <h2 id="prediction-heading" class="visually-hidden">Production Prediction</h2>
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="bi bi-calculator" aria-hidden="true"></i> Production Prediction</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="prediction-form">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="unit">Unit</label>
+                                            <select class="form-control" id="unit" name="unit" required aria-required="true" onchange="updateProductTypes()">
+                                                <option value="CGL-2">CGL-2</option>
+                                                <option value="CGL-3">CGL-3</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="product_type">Product Type</label>
+                                            <select class="form-control" id="product_type" name="product_type" required aria-required="true">
+                                                <option value="GI">GI</option>
+                                                <option value="PPGL">PPGL</option>
+                                                <option value="PPGI">PPGI</option>
+                                                <option value="GL">GL</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="tdc">TDC Code</label>
+                                            <input type="text" class="form-control" id="tdc" name="tdc" required aria-required="true" value="ZAP130">
+                                            <small class="form-text text-muted">E.g., ZAP130, ZAP221, ZST935, ZGN110</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="thickness">Thickness (mm)</label>
+                                            <input type="number" step="0.01" class="form-control" id="thickness" name="thickness" required aria-required="true" value="0.5">
+                                            <small class="form-text text-muted">E.g., 0.5, 0.8, 1.0 (from your dataset)</small>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="zinc">Zinc Coating (g/m²)</label>
+                                            <input type="number" step="0.01" class="form-control" id="zinc" name="zinc" required aria-required="true" value="130">
+                                            <small class="form-text text-muted">E.g., 88, 128, 130, 520 (from your dataset)</small>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="quantity">Quantity</label>
+                                            <input type="number" class="form-control" id="quantity" name="quantity" required aria-required="true" value="1" min="1">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center mt-4">
+                                    <button type="submit" class="btn btn-primary btn-lg" id="predict-btn">
+                                        <i class="bi bi-lightning-charge" aria-hidden="true"></i> Predict Productivity
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-lg ms-2" onclick="fillSample(1)" aria-label="Fill sample data 1">
+                                        <i class="bi bi-1-circle" aria-hidden="true"></i> Sample 1
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-lg ms-2" onclick="fillSample(2)" aria-label="Fill sample data 2">
+                                        <i class="bi bi-2-circle" aria-hidden="true"></i> Sample 2
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction Results -->
+        <section id="prediction-results" class="results-table" style="display: none;" aria-labelledby="results-heading">
+            <h2 id="results-heading" class="visually-hidden">Prediction Results</h2>
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3><i class="bi bi-graph-up" aria-hidden="true"></i> Prediction Results</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-bordered" aria-label="Prediction results details">
+                                <tr>
+                                    <th scope="col">Parameter</th>
+                                    <th scope="col">Value</th>
+                                </tr>
+                                <tr>
+                                    <td>Unit</td>
+                                    <td id="result-unit"></td>
+                                </tr>
+                                <tr>
+                                    <td>Product Type</td>
+                                    <td id="result-product-type"></td>
+                                </tr>
+                                <tr>
+                                    <td>TDC Code</td>
+                                    <td id="result-tdc"></td>
+                                </tr>
+                                <tr>
+                                    <td>Thickness (mm)</td>
+                                    <td id="result-thickness"></td>
+                                </tr>
+                                <tr>
+                                    <td>Zinc Coating (g/m²)</td>
+                                    <td id="result-zinc"></td>
+                                </tr>
+                                <tr>
+                                    <td>Quantity</td>
+                                    <td id="result-quantity"></td>
+                                </tr>
+                                <tr class="table-success">
+                                    <td><strong>Productivity (TPH)</strong></td>
+                                    <td><strong id="result-productivity"></strong></td>
+                                </tr>
+                                <tr class="table-info">
+                                    <td><strong>Required Time (min)</strong></td>
+                                    <td><strong id="result-required-time"></strong></td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert" id="booking-status" role="status">
+                                <h4>Booking Status</h4>
+                                <p id="booking-message"></p>
+                                <div id="booking-actions" class="mt-3"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Orders Table -->
+        <section class="results-table mt-4" aria-labelledby="orders-heading">
+            <h2 id="orders-heading" class="visually-hidden">Production Orders</h2>
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="bi bi-list-check" aria-hidden="true"></i> Production Orders - <span id="current-month-label">{{ current_month }}</span></h3>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" aria-label="Production orders for current month">
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Unit</th>
+                                    <th scope="col">Product Type</th>
+                                    <th scope="col">TDC</th>
+                                    <th scope="col">Thickness</th>
+                                    <th scope="col">Zinc</th>
+                                    <th scope="col">Quantity</th>
+                                    <th scope="col">Productivity</th>
+                                    <th scope="col">Required Time</th>
+                                    <th scope="col">Booking Date</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orders-table-body">
+                                {% for order in orders %}
+                                <tr id="order-{{ order.id }}">
+                                    <td>{{ order.id }}</td>
+                                    <td>{{ order.unit if order.unit else 'N/A' }}</td>
+                                    <td>{{ order.product_type }}</td>
+                                    <td>{{ order.tdc }}</td>
+                                    <td>{{ order.thickness }}</td>
+                                    <td>{{ order.zinc }}</td>
+                                    <td>{{ order.quantity }}</td>
+                                    <td>{{ order.productivity }}</td>
+                                    <td>{{ order.required_time }}</td>
+                                    <td>{{ order.booking_date }}</td>
+                                    <td class="action-buttons">
+                                        <button class="btn btn-sm btn-warning" onclick="editOrder('{{ current_month }}', {{ order.id }})" aria-label="Edit order {{ order.id }}">
+                                            <i class="bi bi-pencil" aria-hidden="true"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteOrder('{{ current_month }}', {{ order.id }})" aria-label="Delete order {{ order.id }}">
+                                            <i class="bi bi-trash" aria-hidden="true"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Edit Time Modal -->
+    <div class="modal fade" id="timeModal" tabindex="-1" aria-labelledby="timeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="timeModalLabel">Edit Available Time</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="edit-month">Month</label>
+                        <select class="form-control" id="edit-month">
+                            {% for month in months %}
+                            <option value="{{ month }}" {% if month == current_month %}selected{% endif %}>{{ month }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-available-time">Available Time (minutes)</label>
+                        <input type="number" class="form-control" id="edit-available-time" value="{{ available_time }}" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="updateAvailableTime()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Order Modal -->
+    <div class="modal fade" id="editOrderModal" tabindex="-1" aria-labelledby="editOrderModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="editOrderModalLabel">Edit Order</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-order-form">
+                        <input type="hidden" id="edit-order-id">
+                        <input type="hidden" id="edit-order-month">
+                        
+                        <div class="form-group">
+                            <label for="edit-unit">Unit</label>
+                            <select class="form-control" id="edit-unit" name="unit" required aria-required="true" onchange="updateEditProductTypes()">
+                                <option value="CGL-2">CGL-2</option>
+                                <option value="CGL-3">CGL-3</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-product-type">Product Type</label>
+                            <select class="form-control" id="edit-product-type" name="product_type" required aria-required="true">
+                                <option value="GI">GI</option>
+                                <option value="PPGL">PPGL</option>
+                                <option value="PPGI">PPGI</option>
+                                <option value="GL">GL</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-tdc">TDC Code</label>
+                            <input type="text" class="form-control" id="edit-tdc" name="tdc" required aria-required="true">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-thickness">Thickness (mm)</label>
+                            <input type="number" step="0.01" class="form-control" id="edit-thickness" name="thickness" required aria-required="true" min="0.01">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-zinc">Zinc Coating (g/m²)</label>
+                            <input type="number" step="0.01" class="form-control" id="edit-zinc" name="zinc" required aria-required="true" min="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-quantity">Quantity</label>
+                            <input type="number" class="form-control" id="edit-quantity" name="quantity" required aria-required="true" min="1">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="update-order-btn" onclick="updateOrder()">Update Order</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+       // Application state
+const appState = {
+    currentMonth: '{{ current_month }}',
+    currentOrderId: null,
+    isLoading: false
+};
+
+// DOM Elements cache
+const elements = {
+    monthSelect: document.getElementById('month-select'),
+    predictionForm: document.getElementById('prediction-form'),
+    predictBtn: document.getElementById('predict-btn'),
+    bookingAlert: document.getElementById('booking-alert'),
+    alertMessage: document.getElementById('alert-message'),
+    availableTime: document.getElementById('available-time'),
+    bookedTime: document.getElementById('booked-time'),
+    remainingTime: document.getElementById('remaining-time'),
+    predictionResults: document.getElementById('prediction-results'),
+    ordersTableBody: document.getElementById('orders-table-body'),
+    currentMonthLabel: document.getElementById('current-month-label')
+};
+
+// Update product types based on unit selection
+function updateProductTypes() {
+    const unit = document.getElementById('unit').value;
+    const productTypeSelect = document.getElementById('product_type');
+    
+    productTypeSelect.innerHTML = '';
+    
+    if (unit === 'CGL-2') {
+        productTypeSelect.innerHTML = `
+            <option value="GI">GI</option>
+            <option value="PPGL">PPGL</option>
+            <option value="PPGI">PPGI</option>
+            <option value="GL">GL</option>
+        `;
+    } else if (unit === 'CGL-3') {
+        productTypeSelect.innerHTML = `
+            <option value="GI">GI</option>
+            <option value="PPGI">PPGI</option>
+            <option value="ZM">ZM</option>
+            <option value="PPZM">PPZM</option>
+        `;
+    }
+}
+
+// Update product types for edit modal based on unit selection
+function updateEditProductTypes() {
+    const unit = document.getElementById('edit-unit').value;
+    const productTypeSelect = document.getElementById('edit-product-type');
+    
+    productTypeSelect.innerHTML = '';
+    
+    if (unit === 'CGL-2') {
+        productTypeSelect.innerHTML = `
+            <option value="GI">GI</option>
+            <option value="PPGL">PPGL</option>
+            <option value="PPGI">PPGI</option>
+            <option value="GL">GL</option>
+        `;
+    } else if (unit === 'CGL-3') {
+        productTypeSelect.innerHTML = `
+            <option value="GI">GI</option>
+            <option value="PPGI">PPGI</option>
+            <option value="ZM">ZM</option>
+            <option value="PPZM">PPZM</option>
+        `;
+    }
+}
+
+// Fill sample data
+function fillSample(sampleNum) {
+    if (sampleNum === 1) {
+        document.getElementById('unit').value = 'CGL-2';
+        updateProductTypes();
+        document.getElementById('product_type').value = 'GI';
+        document.getElementById('tdc').value = 'ZAP221';
+        document.getElementById('thickness').value = '0.5';
+        document.getElementById('zinc').value = '128';
+        document.getElementById('quantity').value = '2';
+    } else if (sampleNum === 2) {
+        document.getElementById('unit').value = 'CGL-3';
+        updateProductTypes();
+        document.getElementById('product_type').value = 'GI';
+        document.getElementById('tdc').value = 'ZST935';
+        document.getElementById('thickness').value = '1.0';
+        document.getElementById('zinc').value = '520';
+        document.getElementById('quantity').value = '1';
+    }
+}
+
+// Set loading state
+function setLoading(isLoading) {
+    appState.isLoading = isLoading;
+    const predictBtn = elements.predictBtn;
+    
+    if (isLoading) {
+        predictBtn.disabled = true;
+        predictBtn.innerHTML = '<span class="loading" aria-hidden="true"></span> Processing...';
+    } else {
+        predictBtn.disabled = false;
+        predictBtn.innerHTML = '<i class="bi bi-lightning-charge" aria-hidden="true"></i> Predict Productivity';
+    }
+}
+
+// Show alert message
+function showAlert(message, type) {
+    const alert = elements.bookingAlert;
+    alert.className = `alert alert-${type} booking-alert`;
+    elements.alertMessage.innerHTML = message;
+    alert.style.display = 'block';
+    
+    // Auto hide after 5 seconds
+    setTimeout(() => {
+        alert.style.display = 'none';
+    }, 5000);
+}
+
+// Handle form submission
+// Handle form submission
+elements.predictionForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    setLoading(true);
+    
+    const formData = new FormData(this);
+    formData.append('month_year', appState.currentMonth);
+    
+    fetch('/predict', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        setLoading(false);
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        // Display results with rounding
+        document.getElementById('result-unit').textContent = data.unit;
+        document.getElementById('result-product-type').textContent = data.product_type;
+        document.getElementById('result-tdc').textContent = data.tdc;
+        document.getElementById('result-thickness').textContent = parseFloat(data.thickness).toFixed(2);
+        document.getElementById('result-zinc').textContent = parseFloat(data.zinc).toFixed(2);
+        document.getElementById('result-quantity').textContent = data.quantity;
+        document.getElementById('result-productivity').textContent = parseFloat(data.productivity).toFixed(2) + ' TPH';
+        document.getElementById('result-required-time').textContent = parseFloat(data.required_time).toFixed(2);
+        
+        // Show booking status with rounded values
+        const bookingStatus = document.getElementById('booking-status');
+        const bookingMessage = document.getElementById('booking-message');
+        const bookingActions = document.getElementById('booking-actions');
+        
+        if (data.can_book) {
+            bookingStatus.className = 'alert alert-success';
+            bookingMessage.innerHTML = `This order requires <strong>${parseFloat(data.required_time).toFixed(2)} minutes</strong>. 
+                                      There are <strong>${parseFloat(data.remaining_time).toFixed(2)} minutes</strong> available in ${appState.currentMonth}.`;
+            bookingActions.innerHTML = `
+                <button class="btn btn-success" onclick="confirmBooking()">
+                    <i class="bi bi-check-circle"></i> Confirm Booking
+                </button>
+            `;
+        } else {
+            bookingStatus.className = 'alert alert-danger';
+            bookingMessage.innerHTML = `This order requires <strong>${parseFloat(data.required_time).toFixed(2)} minutes</strong>, 
+                                      but only <strong>${parseFloat(data.remaining_time).toFixed(2)} minutes</strong> are available in ${appState.currentMonth}. 
+                                      Please try booking for next month.`;
+            bookingActions.innerHTML = '';
+        }
+        
+        // Show results section
+        elements.predictionResults.style.display = 'block';
+        
+        // Scroll to results
+        elements.predictionResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    })
+    .catch(error => {
+        setLoading(false);
+        showAlert('Error: ' + error, 'danger');
+    });
+});
+
+// Confirm booking
+function confirmBooking() {
+    setLoading(true);
+    
+    const formData = new FormData(document.getElementById('prediction-form'));
+    formData.append('month_year', appState.currentMonth);
+    
+    // Call the book_order endpoint instead of predict
+    fetch('/book_order', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        setLoading(false);
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        showAlert('Booking confirmed successfully!', 'success');
+        
+        // Update time displays with rounding to 2 decimal places
+        elements.availableTime.textContent = parseFloat(data.available_time).toFixed(2);
+        elements.bookedTime.textContent = parseFloat(data.booked_time).toFixed(2);
+        elements.remainingTime.textContent = parseFloat(data.remaining_time).toFixed(2);
+        
+        // Refresh orders table
+        loadOrders(appState.currentMonth);
+        
+        // Hide the prediction results section
+        elements.predictionResults.style.display = 'none';
+    })
+    .catch(error => {
+        setLoading(false);
+        showAlert('Error: ' + error, 'danger');
+    });
+}
+// Update available time
+function updateAvailableTime() {
+    const month = document.getElementById('edit-month').value;
+    const availableTime = document.getElementById('edit-available-time').value;
+    
+    const formData = new FormData();
+    formData.append('month_year', month);
+    formData.append('available_time', availableTime);
+    
+    fetch('/update_available_time', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Available time updated successfully!', 'success');
+            
+            // Update time displays if current month
+            if (month === appState.currentMonth) {
+                elements.availableTime.textContent = availableTime;
+                elements.remainingTime.textContent = availableTime - elements.bookedTime.textContent;
+            }
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('timeModal')).hide();
+        } else {
+            showAlert('Error updating available time', 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error: ' + error, 'danger');
+    });
+}
+
+// Load orders for selected month
+function loadOrders(month) {
+    fetch(`/get_orders/${month}`)
+    .then(response => response.json())
+    .then(data => {
+        // Update time displays with rounding to 2 decimal places
+        elements.availableTime.textContent = parseFloat(data.available_time).toFixed(2);
+        elements.bookedTime.textContent = parseFloat(data.booked_time).toFixed(2);
+        elements.remainingTime.textContent = parseFloat(data.remaining_time).toFixed(2);
+        elements.currentMonthLabel.textContent = month;
+        
+        // Update orders table
+        const tbody = elements.ordersTableBody;
+        tbody.innerHTML = '';
+        
+        if (data.orders && data.orders.length > 0) {
+            data.orders.forEach(order => {
+                const row = document.createElement('tr');
+                row.id = `order-${order.id}`;
+                row.innerHTML = `
+                    <td>${order.id}</td>
+                    <td>${order.unit || 'N/A'}</td>
+                    <td>${order.product_type}</td>
+                    <td>${order.tdc}</td>
+                    <td>${parseFloat(order.thickness).toFixed(2)}</td>
+                    <td>${parseFloat(order.zinc).toFixed(2)}</td>
+                    <td>${order.quantity}</td>
+                    <td>${parseFloat(order.productivity).toFixed(2)}</td>
+                    <td>${parseFloat(order.required_time).toFixed(2)}</td>
+                    <td>${order.booking_date}</td>
+                    <td class="action-buttons">
+                        <button class="btn btn-sm btn-warning" onclick="editOrder('${month}', ${order.id})" aria-label="Edit order ${order.id}">
+                            <i class="bi bi-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteOrder('${month}', ${order.id})" aria-label="Delete order ${order.id}">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="11" class="text-center py-4">No orders found for ${month}</td>
+                </tr>
+            `;
+        }
+        
+        appState.currentMonth = month;
+    })
+    .catch(error => {
+        showAlert('Error loading orders: ' + error, 'danger');
+    });
+}
+
+// Edit order
+function editOrder(month, orderId) {
+    fetch(`/get_order/${month}/${orderId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        // Populate the edit form
+        document.getElementById('edit-order-id').value = orderId;
+        document.getElementById('edit-order-month').value = month;
+        document.getElementById('edit-unit').value = data.unit || 'CGL-2';
+        updateEditProductTypes();
+        document.getElementById('edit-product-type').value = data.product_type;
+        document.getElementById('edit-tdc').value = data.tdc;
+        document.getElementById('edit-thickness').value = data.thickness;
+        document.getElementById('edit-zinc').value = data.zinc;
+        document.getElementById('edit-quantity').value = data.quantity;
+        
+        // Show the modal
+        const editModal = new bootstrap.Modal(document.getElementById('editOrderModal'));
+        editModal.show();
+        
+        appState.currentOrderId = orderId;
+    })
+    .catch(error => {
+        showAlert('Error loading order: ' + error, 'danger');
+    });
+}
+
+// Update order
+function updateOrder() {
+    const month = document.getElementById('edit-order-month').value;
+    const orderId = document.getElementById('edit-order-id').value;
+    
+    const formData = new FormData(document.getElementById('edit-order-form'));
+    
+    // Show loading state on update button
+    const updateBtn = document.getElementById('update-order-btn');
+    const originalText = updateBtn.innerHTML;
+    updateBtn.disabled = true;
+    updateBtn.innerHTML = '<span class="loading"></span> Updating...';
+    
+    fetch(`/update_order/${month}/${orderId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        updateBtn.disabled = false;
+        updateBtn.innerHTML = originalText;
+        
+        if (data.error) {
+            showAlert(data.error, 'danger');
+            return;
+        }
+        
+        showAlert('Order updated successfully!', 'success');
+        
+        // Close the modal
+        bootstrap.Modal.getInstance(document.getElementById('editOrderModal')).hide();
+        
+        // Reload orders to update the table and time displays
+        loadOrders(month);
+    })
+    .catch(error => {
+        updateBtn.disabled = false;
+        updateBtn.innerHTML = originalText;
+        showAlert('Error updating order: ' + error, 'danger');
+    });
+}
+
+// Delete order
+function deleteOrder(month, orderId) {
+    if (!confirm('Are you sure you want to delete this order?')) return;
+    
+    fetch(`/delete_order/${month}/${orderId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Order deleted successfully!', 'success');
+            
+            // Remove from table
+            const orderRow = document.getElementById(`order-${orderId}`);
+            if (orderRow) orderRow.remove();
+            
+            // Reload orders to update time displays
+            loadOrders(month);
+        } else {
+            showAlert('Error deleting order', 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error: ' + error, 'danger');
+    });
+}
+
+// Export to Excel
+document.getElementById('export-btn').addEventListener('click', function() {
+    window.location.href = `/export_orders/${appState.currentMonth}`;
+});
+
+// Month selection change
+elements.monthSelect.addEventListener('change', function() {
+    loadOrders(this.value);
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up month selector
+    document.getElementById('edit-month').value = appState.currentMonth;
+    document.getElementById('edit-available-time').value = document.getElementById('available-time').textContent;
+    
+    // Initialize product types based on default unit
+    updateProductTypes();
+    
+    // Load initial orders
+    loadOrders(appState.currentMonth);
+});
+</script>
+</body>
+</html>
