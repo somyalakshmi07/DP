@@ -378,10 +378,23 @@
         <div class="form-container" id="form-container">
             <div class="form-panel">
                 <!-- Login Form -->
-                <form class="form-card" id="login-form" method="POST">
+                <form class="form-card" id="login-form" method="POST" action="{{ url_for('login') }}">
                     <h2>Login</h2>
                     
                     <div class="flash-messages">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    {% if category == 'error' %}
+                                        <div class="flash-message error">{{ message }}</div>
+                                    {% elif category == 'success' %}
+                                        <div class="flash-message success">{{ message }}</div>
+                                    {% else %}
+                                        <div class="flash-message info">{{ message }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
                         <div class="flash-message error" id="login-error" style="display: none;">
                             Invalid username or password
                         </div>
@@ -394,7 +407,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="login-username">Username (Email or Phone)</label>
+                        <label for="login-username">Username</label>
                         <input type="text" id="login-username" name="username" required>
                         <div class="input-error" id="login-username-error">Please enter a valid username</div>
                     </div>
@@ -411,15 +424,28 @@
                 </form>
                 
                 <!-- Register Form -->
-                <form class="form-card" id="register-form" method="POST">
+                <form class="form-card" id="register-form" method="POST" action="{{ url_for('register') }}">
                     <h2>Register</h2>
                     
                     <div class="flash-messages">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    {% if category == 'error' %}
+                                        <div class="flash-message error">{{ message }}</div>
+                                    {% elif category == 'success' %}
+                                        <div class="flash-message success">{{ message }}</div>
+                                    {% else %}
+                                        <div class="flash-message info">{{ message }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
                         <div class="flash-message error" id="register-error" style="display: none;">
                             Please check your inputs
                         </div>
                         <div class="flash-message success" id="register-success" style="display: none;">
-                            Registration submitted! Waiting for admin approval.
+                            Registration successful! Please log in.
                         </div>
                     </div>
                     
@@ -460,6 +486,24 @@
                                 <option value="Finance">Finance</option>
                             </select>
                             <div class="input-error" id="register-department-error">Please select a department</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="register-username">Username</label>
+                            <input type="text" id="register-username" name="username" required>
+                            <div class="input-error" id="register-username-error">Please enter a username</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="register-password">Password</label>
+                            <input type="password" id="register-password" name="password" required>
+                            <div class="input-error" id="register-password-error">Please enter a password</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="confirm-password">Confirm Password</label>
+                            <input type="password" id="confirm-password" name="confirm_password" required>
+                            <div class="input-error" id="confirm-password-error">Passwords do not match</div>
                         </div>
                         
                         <button type="submit">Register</button>
@@ -580,11 +624,6 @@
             password: "admin123"
         };
         
-        // Data storage (in a real app, this would be a database)
-        let pendingRegistrations = JSON.parse(localStorage.getItem('pendingRegistrations')) || [];
-        let approvedUsers = JSON.parse(localStorage.getItem('approvedUsers')) || [];
-        let userCredentials = JSON.parse(localStorage.getItem('userCredentials')) || {};
-        
         // Toggle between login and register forms
         showRegisterBtn.addEventListener('click', function() {
             formContainer.classList.add('toggle-register');
@@ -656,110 +695,6 @@
             this.style.color = 'white';
         });
         
-        // Register Form Submission
-        registerForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const employeeId = document.getElementById('employee-id').value;
-            const name = document.getElementById('register-name').value;
-            const email = document.getElementById('register-email').value;
-            const phone = document.getElementById('register-phone').value;
-            const department = document.getElementById('register-department').value;
-            
-            // Validate inputs
-            if (!employeeId.match(/^[0-9]{8}$/)) {
-                showError('employee-id-error', 'Please enter a valid 8-digit Employee ID');
-                return;
-            }
-            
-            if (!email.match(/[a-zA-Z0-9._%+-]+@gmail\.com$/)) {
-                showError('register-email-error', 'Email must be from gmail.com domain');
-                return;
-            }
-            
-            if (!phone.match(/^[0-9]{10}$/)) {
-                showError('register-phone-error', 'Please enter a valid 10-digit phone number');
-                return;
-            }
-            
-            // Check if employee ID already exists
-            const existingRegistration = pendingRegistrations.find(reg => reg.employeeId === employeeId);
-            const existingUser = approvedUsers.find(user => user.employeeId === employeeId);
-            
-            if (existingRegistration || existingUser) {
-                showError('employee-id-error', 'Employee ID already registered');
-                return;
-            }
-            
-            // Add to pending registrations
-            pendingRegistrations.push({
-                employeeId,
-                name,
-                email,
-                phone,
-                department,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Save to localStorage
-            localStorage.setItem('pendingRegistrations', JSON.stringify(pendingRegistrations));
-            
-            // Show success message
-            document.getElementById('register-error').style.display = 'none';
-            document.getElementById('register-success').style.display = 'block';
-            
-            // Reset form
-            registerForm.reset();
-            
-            // If admin is logged in, refresh the approvals table
-            if (adminPanel.style.display === 'block') {
-                loadPendingApprovals();
-            }
-        });
-        
-        // Login Form Submission
-        loginForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
-            
-            // Check if user exists and password is correct
-            const user = approvedUsers.find(user => 
-                (user.email === username || user.phone === username) && 
-                userCredentials[user.employeeId] && 
-                userCredentials[user.employeeId].password === password
-            );
-            
-            if (user) {
-                // Check if this is the first login (using temporary password)
-                if (userCredentials[user.employeeId].tempPassword) {
-                    // Show password reset form
-                    loginForm.style.display = 'none';
-                    resetPasswordForm.style.display = 'block';
-                    document.getElementById('reset-prompt').style.display = 'block';
-
-                    // Store the current user for password reset
-                    resetPasswordForm.dataset.employeeId = user.employeeId;
-                } else {
-                    // Regular login successful
-                    document.getElementById('login-error').style.display = 'none';
-                    document.getElementById('login-success').style.display = 'block';
-
-                    // Store login state in localStorage
-                    localStorage.setItem('isLoggedIn', 'true');
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    
-                    // Redirect to home.html after 1 second
-                    setTimeout(() => {
-                        window.location.href = "home.html";
-                    }, 1000);
-                }
-            } else {
-                document.getElementById('login-error').style.display = 'block';
-            }
-        });
-        
         // Admin Login Form Submission
         adminLoginForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -775,7 +710,7 @@
                 formContainer.style.display = 'none';
                 adminPanel.style.display = 'block';
                 
-                // Load pending approvals
+                // Load pending approvals from backend
                 loadPendingApprovals();
             } else {
                 document.getElementById('admin-login-error').style.display = 'block';
@@ -795,132 +730,131 @@
                 return;
             }
             
-            // Update password and remove temp flag
-            if (userCredentials[employeeId]) {
-                userCredentials[employeeId].password = newPassword;
-                userCredentials[employeeId].tempPassword = false;
-                
-                // Save to localStorage
-                localStorage.setItem('userCredentials', JSON.stringify(userCredentials));
-                
-                // Show success message and redirect to login
-                alert('Password set successfully! Please login with your new password.');
-                resetPasswordForm.style.display = 'none';
-                loginForm.style.display = 'block';
-                loginForm.reset();
-            }
+            // Send password reset request to backend
+            fetch('/reset-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    employeeId: employeeId,
+                    newPassword: newPassword
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Password set successfully! Please login with your new password.');
+                    resetPasswordForm.style.display = 'none';
+                    loginForm.style.display = 'block';
+                    loginForm.reset();
+                } else {
+                    document.getElementById('reset-error').textContent = data.message;
+                    document.getElementById('reset-error').style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('reset-error').textContent = 'An error occurred. Please try again.';
+                document.getElementById('reset-error').style.display = 'block';
+            });
         });
         
-        // Load pending approvals for admin
+        // Load pending approvals for admin from backend
         function loadPendingApprovals() {
             const tbody = document.getElementById('pending-approvals');
             tbody.innerHTML = '';
             
-            if (pendingRegistrations.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No pending approvals</td></tr>';
-                return;
-            }
-            
-            pendingRegistrations.forEach(registration => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${registration.employeeId}</td>
-                    <td>${registration.name}</td>
-                    <td>${registration.email}</td>
-                    <td>${registration.phone}</td>
-                    <td>${registration.department}</td>
-                    <td>
-                        <button class="action-btn approve-btn" data-id="${registration.employeeId}">Approve</button>
-                        <button class="action-btn decline-btn" data-id="${registration.employeeId}">Decline</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-            
-            // Add event listeners to approve/decline buttons
-            document.querySelectorAll('.approve-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    approveRegistration(this.dataset.id);
+            // Fetch pending registrations from backend
+            fetch('/pending-registrations')
+            .then(response => response.json())
+            .then(registrations => {
+                if (registrations.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No pending approvals</td></tr>';
+                    return;
+                }
+                
+                registrations.forEach(registration => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${registration.employee_id}</td>
+                        <td>${registration.name}</td>
+                        <td>${registration.email}</td>
+                        <td>${registration.phone}</td>
+                        <td>${registration.department}</td>
+                        <td>
+                            <button class="action-btn approve-btn" data-id="${registration.employee_id}">Approve</button>
+                            <button class="action-btn decline-btn" data-id="${registration.employee_id}">Decline</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
                 });
-            });
-            
-            document.querySelectorAll('.decline-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    declineRegistration(this.dataset.id);
+                
+                // Add event listeners to approve/decline buttons
+                document.querySelectorAll('.approve-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        approveRegistration(this.dataset.id);
+                    });
                 });
+                
+                document.querySelectorAll('.decline-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        declineRegistration(this.dataset.id);
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Error loading pending approvals</td></tr>';
             });
         }
         
-        // Approve a registration
+        // Approve a registration via backend
         function approveRegistration(employeeId) {
-            const registration = pendingRegistrations.find(reg => reg.employeeId === employeeId);
-            
-            if (registration) {
-                // Generate temporary password
-                const tempPassword = generateTempPassword();
-                
-                // Add to approved users
-                approvedUsers.push(registration);
-                
-                // Store credentials with temp password
-                userCredentials[employeeId] = {
-                    password: tempPassword,
-                    tempPassword: true
-                };
-                
-                // Remove from pending registrations
-                pendingRegistrations = pendingRegistrations.filter(reg => reg.employeeId !== employeeId);
-                
-                // Save to localStorage
-                localStorage.setItem('pendingRegistrations', JSON.stringify(pendingRegistrations));
-                localStorage.setItem('approvedUsers', JSON.stringify(approvedUsers));
-                localStorage.setItem('userCredentials', JSON.stringify(userCredentials));
-                
-                // Send email with credentials
-                sendApprovalEmail(registration, tempPassword);
-                
-                // Refresh the table
-                loadPendingApprovals();
-            }
+            fetch('/approve-registration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ employeeId: employeeId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Approved registration for ${data.name}. Email with temporary password sent to ${data.email}`);
+                    loadPendingApprovals();
+                } else {
+                    alert('Error approving registration: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error approving registration. Please try again.');
+            });
         }
         
-        // Decline a registration
+        // Decline a registration via backend
         function declineRegistration(employeeId) {
-            pendingRegistrations = pendingRegistrations.filter(reg => reg.employeeId !== employeeId);
-            localStorage.setItem('pendingRegistrations', JSON.stringify(pendingRegistrations));
-            loadPendingApprovals();
-        }
-        
-        // Generate a temporary password
-        function generateTempPassword() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let password = '';
-            for (let i = 0; i < 8; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return password;
-        }
-        
-        // Send approval email with credentials
-        function sendApprovalEmail(registration, tempPassword) {
-            // EmailJS parameters
-            const templateParams = {
-                to_name: registration.name,
-                to_email: registration.email,
-                employee_id: registration.employeeId,
-                temporary_password: tempPassword,
-                login_url: window.location.href
-            };
-            
-            // Send email using EmailJS
-            emailjs.send('service_s6vxxdd', 'template_dpmg1jg', templateParams)
-                .then(function(response) {
-                    console.log('SUCCESS!', response.status, response.text);
-                    alert(`Approved registration for ${registration.name}. Email with temporary password sent to ${registration.email}`);
-                }, function(error) {
-                    console.log('FAILED...', error);
-                    alert(`Approved registration for ${registration.name}. Temporary password: ${tempPassword}. But email failed to send.`);
-                });
+            fetch('/decline-registration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ employeeId: employeeId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Registration declined successfully');
+                    loadPendingApprovals();
+                } else {
+                    alert('Error declining registration: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error declining registration. Please try again.');
+            });
         }
         
         // Helper function to show error messages
@@ -934,21 +868,6 @@
                 errorElement.style.display = 'none';
             }, 3000);
         }
-        
-        // Initialize the page
-        function init() {
-            // Check if we have any pending registrations or users
-            if (pendingRegistrations.length > 0) {
-                console.log(`${pendingRegistrations.length} pending registrations`);
-            }
-            
-            if (approvedUsers.length > 0) {
-                console.log(`${approvedUsers.length} approved users`);
-            }
-        }
-        
-        // Run initialization
-        init();
     </script>
 </body>
 </html>

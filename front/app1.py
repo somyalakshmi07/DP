@@ -2,7 +2,7 @@ from flask import Flask, request, render_template, send_file, redirect, url_for,
 import mysql.connector
 from mysql.connector import pooling
 import pandas as pd
-from io import BytesIO
+from io import BytesIO  # This line was incomplete - make sure it has BytesIO
 import os
 from collections import defaultdict
 from datetime import datetime
@@ -12,7 +12,8 @@ import traceback
 import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 import requests
-from flask_cors import CORS  # Added for CORS support
+from flask_cors import CORS
+import json
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -127,7 +128,7 @@ def health():
 def login():
     # If user is already logged in, redirect to home page
     if 'user_id' in session:
-        return redirect(url_for('index'))
+        return redirect(url_for('index'))  # or url_for('home') if you have that route
 
     if db_pool is None:
         flash('Database connection is not available. Please contact admin.', 'error')
@@ -250,10 +251,8 @@ def register():
 
 # Main routes
 @app.route('/')
-def home():
-    return redirect(url_for('index'))
-
 @app.route('/index')
+@app.route('/home')
 def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -519,160 +518,282 @@ def edit_order(id):
             cursor.close()
             conn.close()
 
-# Data routes
-@app.route('/search', methods=['POST'])
-def search_data():
+
+@app.route('/export', methods=['POST'])
+def export_data():
     conn = None
+    cursor = None
     try:
         filters = request.get_json()
+        logger.info(f"Export request with filters: {filters}")
+
+        unit = filters.get('unit')
         financial_year = filters.get('financialYear')
+        shift = filters.get('shift')
+        order_tdc = filters.get('orderTdc')
+        month = filters.get('month')
+        from_date = filters.get('fromDate')
+        to_date = filters.get('toDate')
 
-        if not financial_year:
-            return jsonify({"error": "Financial Year is a required filter."}), 400
+        # Validate compulsory filters
+        if not unit or not financial_year:
+            return jsonify({"error": "Unit and Financial Year are required."}), 400
 
-        table_name = f"{financial_year[2:]}datacsv"
+        # Determine table name
+        fy_number = financial_year[2:]
+        if unit.lower() == 'cgl-2':
+            table_name = f"{fy_number}datacsv"
+        elif unit.lower() == 'cgl-3':
+            table_name = f"{fy_number}datacgl"
+        else:
+            return jsonify({"error": "Invalid unit selected."}), 400
 
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Check if table exists
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        if not cursor.fetchone():
+            return jsonify({"error": f"Table {table_name} not found"}), 404
+
+        # Build query parts (same as search function)
         query_parts = []
         params = []
 
-        # Dynamically build the WHERE clause based on provided filters
-        if filters.get('fromDate') and filters.get('toDate'):
-            query_parts.append("`Start Date` BETWEEN %s AND %s")
-            params.extend([filters['fromDate'], filters['toDate']])
-        if filters.get('month'):
-            query_parts.append("MONTH(`Start Date`) = %s")
-            params.append(filters['month'])
-        if filters.get('orderTdc'):
-            query_parts.append("`Order_Tdc` LIKE %s")
-            params.append(f"%{filters['orderTdc']}%")
-        if filters.get('shift'):
-            query_parts.append("`Shift` = %s")
-            params.append(filters['shift'])
-        if filters.get('unit'):
-            query_parts.append("`Next Unit` = %s") # Assuming 'unit' maps to 'Next Unit' column
-            params.append(filters['unit'])
+        # DATE RANGE FILTERING
+        if from_date and not to_date:
+            day = from_date[8:10]
+            month_part = from_date[5:7]
+            year = from_date[0:4]
+            from_date_ddmmyyyy = f"{day}-{month_part}-{year}"
+            query_parts.append("STR_TO_DATE(`Start Date`, '%d-%m-%Y') >= STR_TO_DATE(%s, '%d-%m-%Y')")
+            params.append(from_date_ddmmyyyy)
 
+        elif from_date and to_date:
+            day_from = from_date[8:10]
+            month_from = from_date[5:7]
+            year_from = from_date[0:4]
+            from_date_ddmmyyyy = f"{day_from}-{month_from}-{year_from}"
+            
+            day_to = to_date[8:10]
+            month_to = to_date[5:7]
+            year_to = to_date[0:4]
+            to_date_ddmmyyyy = f"{day_to}-{month_to}-{year_to}"
+            
+            query_parts.append("STR_TO_DATE(`Start Date`, '%d-%m-%Y') BETWEEN STR_TO_DATE(%s, '%d-%m-%Y') AND STR_TO_DATE(%s, '%d-%m-%Y')")
+            params.extend([from_date_ddmmyyyy, to_date_ddmmyyyy])
+
+        # MONTH FILTER
+        elif month and not from_date and not to_date:
+            month_str = str(month).zfill(2)
+            query_parts.append("SUBSTRING(`Start Date`, 4, 2) = %s")
+            params.append(month_str)
+
+        # ORDER TDC FILTER
+        if order_tdc:
+            query_parts.append("`Order Tdc` LIKE %s")
+            params.append(f"%{order_tdc}%")
+
+        # SHIFT FILTER
+        if shift:
+            query_parts.append("`Shift` = %s")
+            params.append(shift)
+
+        # Build the query
         base_query = f"SELECT * FROM `{table_name}`"
         if query_parts:
             base_query += " WHERE " + " AND ".join(query_parts)
-        base_query += " ORDER BY `Start Date` DESC, `Start Time` DESC LIMIT 500"
+        base_query += " ORDER BY STR_TO_DATE(`Start Date`, '%d-%m-%Y') DESC, `Start Time` DESC"
 
+        cursor.execute(base_query, tuple(params))
+        rows = cursor.fetchall()
+
+        if not rows:
+            return jsonify({"error": "No data found for the selected filters"}), 404
+
+        # Create Excel file
+        output = BytesIO()
+        
+        # Create a simple Excel file using pandas
+        df = pd.DataFrame(rows)
+        
+        # Convert any datetime objects to strings
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Create Excel writer
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Create a sheet for filter info
+            filter_info = pd.DataFrame({
+                'Filter': ['Unit', 'Financial Year', 'Shift', 'Order TDC', 'Month', 'From Date', 'To Date', 'Export Date', 'Total Records'],
+                'Value': [
+                    unit,
+                    financial_year,
+                    shift if shift else 'All',
+                    order_tdc if order_tdc else 'All', 
+                    month if month else 'All',
+                    from_date if from_date else 'Not specified',
+                    to_date if to_date else 'Not specified',
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    len(rows)
+                ]
+            })
+            
+            filter_info.to_excel(writer, sheet_name='Filter Info', index=False)
+            
+            # Write main data
+            df.to_excel(writer, sheet_name='Production Data', index=False)
+            
+            # Add header for production data sheet
+            worksheet = writer.sheets['Production Data']
+            worksheet.cell(row=1, column=1, value='PRODUCTION DATA')
+            
+        output.seek(0)
+        
+        # Create filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"Production_Data_{unit}_{financial_year}_{timestamp}.xlsx"
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    except Exception as e:
+        logger.error(f"Export Error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"Export failed: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+@app.route('/search', methods=['POST'])
+def search_data():
+    conn = None
+    cursor = None
+    try:
+        filters = request.get_json()
+        logger.info(f"Received search request: {filters}")
+
+        unit = filters.get('unit')
+        financial_year = filters.get('financialYear')
+        shift = filters.get('shift')
+        order_tdc = filters.get('orderTdc')
+        month = filters.get('month')
+        from_date = filters.get('fromDate')
+        to_date = filters.get('toDate')
+
+        # Validate compulsory filters
+        if not unit:
+            return jsonify({"error": "Unit is a required filter."}), 400
+        if not financial_year:
+            return jsonify({"error": "Financial Year is a required filter."}), 400
+
+        # Determine table name
+        fy_number = financial_year[2:]
+        if unit.lower() == 'cgl-2':
+            table_name = f"{fy_number}datacsv"
+        elif unit.lower() == 'cgl-3':
+            table_name = f"{fy_number}datacgl"
+        else:
+            return jsonify({"error": "Invalid unit selected."}), 400
+
+        # Check if table exists
         conn = db_pool.get_connection()
         cursor = conn.cursor(dictionary=True, buffered=True)
+        
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        if not cursor.fetchone():
+            return jsonify([])
+
+        logger.info(f"Using table: {table_name}")
+
+        # Build query parts
+        query_parts = []
+        params = []
+
+        # DATE RANGE FILTERING (fromDate only)
+        if from_date and not to_date:
+            # Convert yyyy-mm-dd format to dd-mm-yyyy for comparison
+            day = from_date[8:10]
+            month_part = from_date[5:7]
+            year = from_date[0:4]
+            from_date_ddmmyyyy = f"{day}-{month_part}-{year}"
+            
+            query_parts.append("STR_TO_DATE(`Start Date`, '%d-%m-%Y') >= STR_TO_DATE(%s, '%d-%m-%Y')")
+            params.append(from_date_ddmmyyyy)
+
+        # DATE RANGE FILTERING (both fromDate and toDate)
+        elif from_date and to_date:
+            day_from = from_date[8:10]
+            month_from = from_date[5:7]
+            year_from = from_date[0:4]
+            from_date_ddmmyyyy = f"{day_from}-{month_from}-{year_from}"
+            
+            day_to = to_date[8:10]
+            month_to = to_date[5:7]
+            year_to = to_date[0:4]
+            to_date_ddmmyyyy = f"{day_to}-{month_to}-{year_to}"
+            
+            query_parts.append("STR_TO_DATE(`Start Date`, '%d-%m-%Y') BETWEEN STR_TO_DATE(%s, '%d-%m-%Y') AND STR_TO_DATE(%s, '%d-%m-%Y')")
+            params.extend([from_date_ddmmyyyy, to_date_ddmmyyyy])
+
+        # MONTH FILTER (only if no date range is specified)
+        elif month and not from_date and not to_date:
+            month_str = str(month).zfill(2)
+            query_parts.append("SUBSTRING(`Start Date`, 4, 2) = %s")
+            params.append(month_str)
+
+        # ORDER TDC FILTER
+        if order_tdc:
+            query_parts.append("`Order Tdc` LIKE %s")
+            params.append(f"%{order_tdc}%")
+
+        # SHIFT FILTER
+        if shift:
+            query_parts.append("`Shift` = %s")
+            params.append(shift)
+
+        # Build the query
+        base_query = f"SELECT * FROM `{table_name}`"
+        if query_parts:
+            base_query += " WHERE " + " AND ".join(query_parts)
+        base_query += " ORDER BY STR_TO_DATE(`Start Date`, '%d-%m-%Y') DESC, `Start Time` DESC LIMIT 500"
+
+        logger.info(f"Executing query: {base_query}")
+        logger.info(f"With parameters: {params}")
+
         cursor.execute(base_query, tuple(params))
         results = [dict(row) for row in cursor.fetchall()]
 
-        # Convert datetime objects to strings for JSON compatibility
+        # Convert datetime to string for JSON
         for row in results:
             for key, value in row.items():
                 if isinstance(value, datetime):
                     row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, bytes): # Handle potential bytearray from DB
+                elif isinstance(value, bytes):
                     row[key] = value.decode('utf-8')
 
+        logger.info(f"Found {len(results)} results from table {table_name}")
         return jsonify(results)
 
     except mysql.connector.Error as err:
-        print(f"Database Error: {err}")
-        return jsonify({"error": f"Database error: {err.msg}"}), 500
+        logger.error(f"MySQL Error: {err}")
+        return jsonify([])
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Unexpected Error: {str(e)}")
+        return jsonify([])
     finally:
-        if conn and conn.is_connected():
+        if cursor:
             cursor.close()
+        if conn and conn.is_connected():
             conn.close()
 
-@app.route('/get_filtered_data', methods=['POST'])
-def get_filtered_data():
-    data = request.json
-    cgl = data.get('cgl')
-    fy = data.get('fy')
-    product = data.get('product')
-
-    print(f"Received: CGL={cgl}, FY={fy}, Product={product}")  # Debug
-
-    if cgl != "CGL-2" or not fy or not product:
-        return jsonify({"error": "Missing or invalid inputs"}), 400
-
-    table = f"{fy}datacsv"
-    print(f"Querying table: {table}")  # Debug
-
-    conn = None
-    try:
-        # Use **db_config to unpack the dictionary into keyword arguments
-        conn = db_pool.get_connection()
-        # Use a dictionary cursor from the start for both operations
-        cursor = conn.cursor(dictionary=True)
-
-        # Ensure Area column exists
-        cursor.execute(f"SHOW COLUMNS FROM `{table}` LIKE 'Area';")
-        if not cursor.fetchone():
-            cursor.execute(f"ALTER TABLE `{table}` ADD COLUMN `Area` DOUBLE")
-
-        cursor.execute(f"SHOW COLUMNS FROM `{table}` LIKE 'Zinc';")
-        if not cursor.fetchone():
-            cursor.execute(f"ALTER TABLE `{table}` ADD COLUMN `Zinc` DOUBLE")
-
-        # Update Area and Zinc values
-        cursor.execute(f"""
-            UPDATE `{table}` 
-            SET `Area` = ROUND((`Ip Width` * `Total Length`) / 1000, 4), `Zinc` = ROUND((`Ip Width` * `Total Length` * `Total Zn/AlZn Coating`) / 1000000000, 3)
-        """)
-
-        conn.commit()
-
-        query = f"""
-        SELECT 
-            `Op Batch No`,
-            `Actual Product`, 
-            `Actual Tdc`,
-            CASE 
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZAP' THEN 'Appliance'
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZST' THEN 'Retail'
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZGN' THEN 'Retail'
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZTU' THEN 'P&T'
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZPL' THEN 'Panel'
-                WHEN LEFT(`Actual Tdc`, 3) = 'ZEX' THEN 'export'
-                ELSE 'Other'
-            END AS segment,
-            `Prop Ip Wt`,
-            `O/P Wt`,
-            `Total Length`,
-            `Area`,
-            `Zinc`,
-            ROUND(`Process Duration(in min)`, 0) AS `Process Duration(in min)`,
-            ROUND((`Prop Ip Wt` * 1000) / (7.850 * (`Ip Width` * `Total Length`) / 1000), 3) AS `CRFH thickness`,
-            ROUND((`Total Zn/AlZn Coating` / 
-                CASE 
-                    WHEN `Actual Product` = 'GI' THEN 7140
-                    WHEN `Actual Product` IN ('GL', 'PPGL') THEN 3750
-                    WHEN `Actual Product` = 'ZM' THEN 6850
-                    ELSE NULL
-                END
-            ) + ROUND((`Prop Ip Wt` * 1000) / (7.850 * (`Ip Width` * `Total Length`) / 1000), 3), 4) AS `GP thickness`,
-            `Total Zn/AlZn Coating`,
-            `Op Width`,
-            ROUND((`Total Length`/`Process Duration(in min)`),3) as speed,
-            ROUND((`O/P Wt`/`Process Duration(in min)`)*60,3) as productivity
-
-        FROM `{table}`
-        WHERE `Actual Product` = %s
-        """
-
-        cursor.execute(query, (product,))
-        rows = cursor.fetchall()
-        return jsonify(rows)
-
-    except Exception as e:
-        print(f"Error: {e}")  # Debug
-        return jsonify({"error": str(e)}), 500
-    finally:
-        # Ensure the connection is closed even if an error occurs
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
-    
 @app.route('/summary', methods=['GET'])
 def summary():
     conn = None
@@ -883,6 +1004,332 @@ def export_summary():
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+@app.route('/get_filtered_data', methods=['POST'])
+def get_filtered_data():
+    data = request.json
+    cgl = data.get('cgl')
+    fy = data.get('fy')
+    product = data.get('product')
+
+    if not cgl or not fy or not product:
+        return jsonify({"error": "Missing required inputs: cgl, fy, and product are required"}), 400
+
+    # Determine table name
+    table = None
+    if cgl == "CGL-2":
+        table = f"{fy.replace('FY', '')}datacsv"
+    elif cgl == "CGL-3":
+        table = f"{fy.replace('FY', '')}datacgl"
+    else:
+        return jsonify({"error": "Invalid CGL line specified"}), 400
+
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Check if table exists
+        cursor.execute("SHOW TABLES LIKE %s", (table,))
+        if not cursor.fetchone():
+            return jsonify({"error": f"Table '{table}' not found"}), 404
+
+        # Get column names in original order
+        cursor.execute(f"SHOW COLUMNS FROM `{table}`")
+        columns_info = cursor.fetchall()
+        column_names = [col['Field'] for col in columns_info]
+        select_columns = ", ".join([f"`{col}`" for col in column_names])
+
+        # Build the query with original column order
+        query = f"""
+        SELECT {select_columns}
+        FROM `{table}`
+        WHERE `Actual Product` = %s
+        AND `Next Unit` = %s
+        ORDER BY `Start Date` DESC, `Start Time` DESC
+        LIMIT 1000
+        """
+
+        cursor.execute(query, (product, cgl))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return jsonify({
+                "message": "No results found matching your criteria",
+                "filters": {"cgl": cgl, "fy": fy, "product": product}
+            }), 404
+
+        return jsonify(rows)
+
+    except mysql.connector.Error as db_error:
+        return jsonify({"error": f"Database error: {str(db_error)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/tables')
+def debug_tables():
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SHOW TABLES LIKE '%data%'")
+        tables = [list(table.values())[0] for table in cursor.fetchall()]
+        return jsonify({"tables": tables})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/table-info/<table_name>')
+def debug_table_info(table_name):
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if table exists
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        if not cursor.fetchone():
+            return jsonify({"error": f"Table {table_name} does not exist"})
+        
+        # Get column info
+        cursor.execute(f"DESCRIBE `{table_name}`")
+        columns = cursor.fetchall()
+        
+        # Get sample data
+        cursor.execute(f"SELECT * FROM `{table_name}` LIMIT 5")
+        sample_data = cursor.fetchall()
+        
+        return jsonify({
+            "table_exists": True,
+            "columns": columns,
+            "sample_data": sample_data
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/data-sample/<table_name>')
+def debug_data_sample(table_name):
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(f"SELECT `Actual Product`, `Next Unit`, COUNT(*) as count FROM `{table_name}` GROUP BY `Actual Product`, `Next Unit`")
+        data_distribution = cursor.fetchall()
+        return jsonify({"data_distribution": data_distribution})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/test-connection')
+def test_connection():
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT NOW() as current_time")
+        result = cursor.fetchone()
+        return jsonify({"status": "connected", "database_time": result[0]})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/debug/table-columns/<table_name>')
+def debug_table_columns(table_name):
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        columns = cursor.fetchall()
+        
+        # Filter for columns that might be related to order TDC
+        order_columns = [col for col in columns if 'order' in col['Field'].lower() or 'tdc' in col['Field'].lower()]
+        
+        return jsonify({
+            "all_columns": columns,
+            "order_related_columns": order_columns
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/table-sample/<table_name>')
+def debug_table_sample(table_name):
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if table exists
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        if not cursor.fetchone():
+            return jsonify({"error": f"Table {table_name} does not exist"})
+        
+        # Get sample data with date information
+        cursor.execute(f"""
+            SELECT 
+                `Start Date`,
+                `Order Tdc`,
+                `Actual Product`,
+                `Next Unit`,
+                MONTH(STR_TO_DATE(`Start Date`, '%d-%m-%Y')) as extracted_month,
+                LENGTH(`Start Date`) as date_length,
+                SUBSTRING(`Start Date`, 4, 2) as month_part
+            FROM `{table_name}` 
+            LIMIT 20
+        """)
+        
+        sample_data = cursor.fetchall()
+        
+        # Get column names
+        cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        columns = [col['Field'] for col in cursor.fetchall()]
+        
+        return jsonify({
+            "table_exists": True,
+            "columns": columns,
+            "sample_data": sample_data,
+            "date_analysis": "Examining date format and month extraction"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/fy-tables')
+def debug_fy_tables():
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check for all possible table patterns
+        table_patterns = [
+            '%datacsv%', '%datacgl%', '%data_csv%', '%data_cgl%',
+            '%fy24%', '%fy25%', '%2024%', '%2025%'
+        ]
+        
+        all_tables = []
+        for pattern in table_patterns:
+            cursor.execute("SHOW TABLES LIKE %s", (pattern,))
+            tables = cursor.fetchall()
+            # Use list(table.values())[0] for each table dict to get the table name
+            all_tables.extend([list(table.values())[0] for table in tables])
+        
+        # Remove duplicates and sort
+        unique_tables = sorted(list(set(all_tables)))
+        
+        return jsonify({
+            "all_data_tables": unique_tables,
+            "suggested_patterns": [
+                "24datacsv", "25datacsv", "24datacgl", "25datacgl",
+                "fy24datacsv", "fy25datacsv", "fy24datacgl", "fy25datacgl",
+                "2024datacsv", "2025datacsv", "2024datacgl", "2025datacgl"
+            ]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/check-fy-table/<fy>/<unit>')
+def debug_check_fy_table(fy, unit):
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        fy_number = fy[2:] if fy.startswith('FY') else fy
+        fy_full = fy.lower()
+        
+        possible_tables = []
+        if unit.lower() == 'cgl-2':
+            possible_tables = [
+                f"{fy_number}datacsv", f"{fy_full}datacsv", f"202{fy_number}datacsv",
+                f"data_csv_{fy_number}", f"csv_data_{fy_number}"
+            ]
+        else:
+            possible_tables = [
+                f"{fy_number}datacgl", f"{fy_full}datacgl", f"202{fy_number}datacgl",
+                f"data_cgl_{fy_number}", f"cgl_data_{fy_number}"
+            ]
+        
+        existing_tables = []
+        for table in possible_tables:
+            cursor.execute("SHOW TABLES LIKE %s", (table,))
+            if cursor.fetchone():
+                existing_tables.append(table)
+        
+        # Check if tables have data
+        table_info = {}
+        for table in existing_tables:
+            cursor.execute(f"SELECT COUNT(*) as count FROM `{table}`")
+            count = cursor.fetchone()['count']
+            cursor.execute(f"SELECT MIN(`Start Date`) as min_date, MAX(`Start Date`) as max_date FROM `{table}`")
+            date_range = cursor.fetchone()
+            table_info[table] = {
+                "record_count": count,
+                "date_range": date_range
+            }
+        
+        return jsonify({
+            "financial_year": fy,
+            "unit": unit,
+            "possible_tables": possible_tables,
+            "existing_tables": existing_tables,
+            "table_info": table_info
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.route('/debug/date-conversion-test')
+def debug_date_conversion_test():
+    """Test date conversion from yyyy-mm-dd to dd-mm-yyyy"""
+    test_dates = [
+        '2024-01-15',  # yyyy-mm-dd
+        '2024-12-31',  # yyyy-mm-dd
+        '2025-06-01',  # yyyy-mm-dd
+    ]
+    
+    converted_dates = []
+    for date_str in test_dates:
+        # Convert yyyy-mm-dd to dd-mm-yyyy
+        day = date_str[8:10]
+        month_part = date_str[5:7]
+        year = date_str[0:4]
+        converted = f"{day}-{month_part}-{year}"
+        converted_dates.append({
+            "original": date_str,
+            "converted": converted
+        })
+    
+    return jsonify({
+        "date_conversion_test": converted_dates,
+        "explanation": "Converting from HTML date input format (yyyy-mm-dd) to database format (dd-mm-yyyy)"
+    })
 
 if __name__ == "__main__":
     # Initialize database tables

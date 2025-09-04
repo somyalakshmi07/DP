@@ -317,6 +317,43 @@
             background-color: #1D2B36;
         }
 
+        /* Export button loading state */
+        .btn-loading {
+            position: relative;
+            color: transparent !important;
+        }
+
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Success message */
+        .export-success {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
         /* Responsive styles */
         @media (max-width: 1024px) {
             .selection-menu {
@@ -374,6 +411,28 @@
                 width: 100%;
             }
         }
+
+        .error-message {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #ffcdd2;
+        }
+
+        .success-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-weight: 500;
+        }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -385,10 +444,10 @@
                 <h2>Production Dashboard</h2>
             </div>
             <nav class="nav-links">
-                 <a href="{{ url_for('index') }}" class="active">Home</a>
-                <a href="{{ url_for('production') }}">Production</a>
-                <a href="{{ url_for('productivity') }}">Productivity</a>
-                <a href="{{ url_for('order_punch') }}">Order Punch</a>
+                 <a href="{{ url_for('index') }}"><i class="fas fa-home"></i> <span>Home</span></a>
+                <a href="{{ url_for('production') }}" class="active"><i class="fas fa-industry"></i> <span>Production</span></a>
+                <a href="{{ url_for('productivity') }}"><i class="fas fa-chart-line"></i> <span>Productivity</span></a>
+                <a href="{{ url_for('order_punch') }}"><i class="fas fa-ticket-alt"></i> <span>Order Punch</span></a>
             </nav>
             <div class="sidebar-footer">
                 <p>Version 2.1.0</p>
@@ -400,20 +459,41 @@
             <div class="page-header">
                 <h1>Production Data</h1>
                 <div class="header-actions">
-                    <button class="btn"><i class="fas fa-download"></i> Export</button>
+                    <button class="btn" id="exportBtn"><i class="fas fa-download"></i> Export</button>
                 </div>
             </div>
 
             <!-- Filter Section -->
             <div class="selection-menu">
                 <div class="filter-group">
-                    <label for="fromDate">From Date:</label>
-                    <input type="date" id="fromDate" name="fromDate">
+                    <label for="unit">Unit: *</label>
+                    <select id="unit" name="unit" required>
+                        <option value="">Select Unit</option>
+                        <option value="CGL-2">CGL-2</option>
+                        <option value="CGL-3">CGL-3</option>
+                    </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label for="toDate">To Date:</label>
-                    <input type="date" id="toDate" name="toDate">
+                    <label for="financialYear">FY: *</label>
+                    <select id="financialYear" name="financialYear" required disabled>
+                        <option value="">Select FY</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="shift">Shift:</label>
+                    <select id="shift" name="shift">
+                        <option value="">All Shifts</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="orderTdc">Order TDC:</label>
+                    <input type="text" id="orderTdc" name="orderTdc" placeholder="Order TDC">
                 </div>
                 
                 <div class="filter-group">
@@ -436,51 +516,29 @@
                 </div>
                 
                 <div class="filter-group">
-                    <label for="orderTdc">Order TDC:</label>
-                    <input type="text" id="orderTdc" name="orderTdc" placeholder="Order TDC">
+                    <label for="fromDate">From Date:</label>
+                    <input type="date" id="fromDate" name="fromDate">
                 </div>
                 
                 <div class="filter-group">
-                    <label for="financialYear">FY:</label>
-                    <select id="financialYear" name="financialYear">
-                        <option value="FY22">FY22</option>
-                        <option value="FY23">FY23</option>
-                        <option value="FY24">FY24</option>
-                        <option value="FY25" selected>FY25</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="shift">Shift:</label>
-                    <select id="shift" name="shift">
-                        <option value="">All Shifts</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="unit">Unit:</label>
-                    <select id="unit" name="unit">
-                        <option value="">All Units</option>
-                        <option value="cgl1">CGL-1</option>
-                        <option value="cgl2">CGL-2</option>
-                        <option value="cgl3">CGL-3</option>
-                    </select>
+                    <label for="toDate">To Date:</label>
+                    <input type="date" id="toDate" name="toDate">
                 </div>
                 
                 <div class="search-actions">
-                    <button class="btn-outline"><i class="fas fa-undo"></i> Reset</button>
-                    <button type="button" class="btn" onclick="searchData()"><i class="fas fa-search"></i> Search</button>
+                    <button class="btn-outline" id="resetBtn"><i class="fas fa-undo"></i> Reset</button>
+                    <button type="button" class="btn" id="searchBtn"><i class="fas fa-search"></i> Search</button>
                 </div>
             </div>
+
+            <!-- Error message container -->
+            <div id="errorContainer" style="display: none;" class="error-message"></div>
 
             <!-- Results Section -->
             <div class="results-header">
                 <div class="results-count">Showing <span id="resultCount">0</span> records</div>
                 <div class="results-actions">
-                    <button class="btn-outline"><i class="fas fa-columns"></i> Columns</button>
+                    <button class="btn-outline" id="columnsBtn"><i class="fas fa-columns"></i> Columns</button>
                 </div>
             </div>
 
@@ -491,7 +549,7 @@
 
             <div id="results" class="table-container">
                 <!-- Results will be displayed here -->
-                <p class="no-data">Use the filters above to search for production data</p>
+                <p class="no-data">Select Unit and FY, then click Search to load data</p>
             </div>
 
             <div class="pagination" id="pagination">
@@ -516,94 +574,251 @@
         const resultCountSpan = document.getElementById('resultCount');
         const loadingDiv = document.querySelector('.loading');
         const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+        const unitSelect = document.getElementById('unit');
+        const fySelect = document.getElementById('financialYear');
+        const searchBtn = document.getElementById('searchBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const errorContainer = document.getElementById('errorContainer');
+
+        // Unit to FY mapping
+        const unitFYMapping = {
+            'CGL-2': ['FY22', 'FY23', 'FY24', 'FY25'],
+            'CGL-3': ['FY24', 'FY25']
+        };
+
+        // Function to show error message
+        function showError(message) {
+            errorContainer.textContent = message;
+            errorContainer.style.display = 'block';
+        }
+
+        // Function to hide error message
+        function hideError() {
+            errorContainer.style.display = 'none';
+        }
+
+        // Function to update FY options based on selected unit
+        function updateFYOptions() {
+            const unit = unitSelect.value;
+            fySelect.innerHTML = '<option value="">Select FY</option>';
+            
+            if (unit && unitFYMapping[unit]) {
+                fySelect.disabled = false;
+                unitFYMapping[unit].forEach(fy => {
+                    const option = document.createElement('option');
+                    option.value = fy;
+                    option.textContent = fy;
+                    fySelect.appendChild(option);
+                });
+            } else {
+                fySelect.disabled = true;
+            }
+        }
+
+        // Function to validate filters
+        function validateFilters() {
+            hideError();
+            
+            if (!unitSelect.value) {
+                showError('Please select a Unit');
+                return false;
+            }
+            
+            if (!fySelect.value) {
+                showError('Please select a Financial Year');
+                return false;
+            }
+            
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            
+            if (toDate && !fromDate) {
+                showError('From Date is required when To Date is selected');
+                return false;
+            }
+            
+            return true;
+        }
 
         // Function to show loading state
         function showLoading() {
             loadingDiv.style.display = 'block';
-            resultsDiv.innerHTML = '';
-            paginationDiv.innerHTML = '';
+            exportBtn.classList.add('btn-loading');
+            exportBtn.disabled = true;
         }
 
         // Function to hide loading state
         function hideLoading() {
             loadingDiv.style.display = 'none';
+            exportBtn.classList.remove('btn-loading');
+            exportBtn.disabled = false;
         }
 
         // Function to search and display results
         async function searchData(page = 1) {
+            if (!validateFilters()) {
+                return;
+            }
+            
             currentPage = page;
             
+            const unit = unitSelect.value;
+            const fy = fySelect.value;
+            const shift = document.getElementById('shift').value;
+            const orderTdc = document.getElementById('orderTdc').value.trim(); // Trim whitespace
+            const month = document.getElementById('month').value;
+            const monthStr = month ? String(parseInt(month)).padStart(1, '0') : null; // Zero-padded month
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
-            const month = document.getElementById('month').value;
-            const orderTdc = document.getElementById('orderTdc').value;
-            const financialYear = document.getElementById('financialYear').value;
-            const shift = document.getElementById('shift').value;
-            const unit = document.getElementById('unit').value;
 
             showLoading();
 
             try {
-                // In a real application, this would be an API call
-                // Simulating API delay for demo purposes
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        unit,
+                        financialYear: fy,
+                        shift,
+                        orderTdc: orderTdc || null,
+                        month,
+                        fromDate, // yyyy-mm-dd format
+                        toDate    // yyyy-mm-dd format
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
                 
-                // For demonstration, we'll use mock data
-                const mockData = generateMockData(223);
-                currentData = mockData;
-                totalPages = Math.ceil(mockData.length / ITEMS_PER_PAGE);
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 
-                renderResults(mockData);
+                currentData = data;
+                totalPages = Math.ceil(data.length / ITEMS_PER_PAGE);
+                
+                renderResults(data);
                 renderPagination();
                 
-                resultCountSpan.textContent = mockData.length;
+                resultCountSpan.textContent = data.length;
+                
             } catch (error) {
-                resultsDiv.innerHTML = `<p class="error">Error loading data: ${error.message}</p>`;
+                showError(`Error loading data: ${error.message}`);
                 console.error('Search error:', error);
             } finally {
                 hideLoading();
             }
         }
 
-        // Function to generate mock data for demonstration
-        function generateMockData(count) {
-            const mockData = [];
-            const products = ["GI Sheet", "GL Sheet", "PPGI", "PPGL"];
-            const segments = ["Automotive", "Construction", "Household", "Industrial"];
-            const shifts = ["A", "B", "C"];
-            const units = ["cgl1", "cgl2", "cgl3"];
-            const statuses = ["Completed", "In Progress", "On Hold"];
-            
-            for (let i = 1; i <= count; i++) {
-                mockData.push({
-                    "Row": i,
-                    "Actual Product": products[Math.floor(Math.random() * products.length)],
-                    "Segment": segments[Math.floor(Math.random() * segments.length)],
-                    "DP FLAG": Math.random() > 0.5 ? "Yes" : "No",
-                    "MotherBatchNo": "MB" + Math.floor(10000 + Math.random() * 90000),
-                    "Ip Width": (800 + Math.floor(Math.random() * 600)) + "mm",
-                    "Ip Thick": (0.3 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
-                    "Mother Ip Wt": (5000 + Math.floor(Math.random() * 15000)) + "kg",
-                    "Order_Tdc": "TDC" + Math.floor(100000 + Math.random() * 900000),
-                    "Op Batch No": "OP" + Math.floor(10000 + Math.random() * 90000),
-                    "Actual Tdc": "TDC" + Math.floor(100000 + Math.random() * 900000),
-                    "Op Thk": (0.25 + (Math.floor(Math.random() * 20) / 100)).toFixed(2) + "mm",
-                    "Op Width": (800 + Math.floor(Math.random() * 600)) + "mm",
-                    "Prop Ip Wt": (5000 + Math.floor(Math.random() * 15000)) + "kg",
-                    "O/P_Wt": (4800 + Math.floor(Math.random() * 14500)) + "kg",
-                    "Total Length": (1000 + Math.floor(Math.random() * 2000)) + "m",
-                    "Material Yield(%) with Zinc": (85 + Math.floor(Math.random() * 10)) + "%",
-                    "Material Yield(%) without Zinc": (80 + Math.floor(Math.random() * 12)) + "%",
-                    "Start Date": new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString(),
-                    "Start Time": new Date().toLocaleTimeString(),
-                    "Shift": shifts[Math.floor(Math.random() * shifts.length)],
-                    "Process Duration(in min)": Math.floor(30 + Math.random() * 300),
-                    "Unit": units[Math.floor(Math.random() * units.length)],
-                    "Status": statuses[Math.floor(Math.random() * statuses.length)]
-                });
+        // Function to export data
+        async function exportData() {
+            if (!validateFilters()) {
+                return;
             }
             
-            return mockData;
+            const unit = unitSelect.value;
+            const fy = fySelect.value;
+            const shift = document.getElementById('shift').value;
+            const orderTdc = document.getElementById('orderTdc').value.trim();
+            const month = document.getElementById('month').value;
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+
+            showLoading();
+            exportBtn.disabled = true;
+
+            try {
+                const response = await fetch('/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        unit,
+                        financialYear: fy,
+                        shift,
+                        orderTdc: orderTdc || null,
+                        month,
+                        fromDate,
+                        toDate
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Export failed: ${response.statusText}`);
+                }
+
+                // Handle the Excel file download
+                const blob = await response.blob();
+        
+                // Check if blob is valid
+                if (blob.size === 0) {
+                    throw new Error('Empty file received from server');
+                }
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Create filename
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                a.download = `production_data_${unit}_${fy}_${timestamp}.xlsx`;
+                
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+        
+                // Show success message
+                showSuccessMessage('Export completed successfully!');
+        
+            } catch (error) {
+                console.error('Export error:', error);
+                showError(`Export failed: ${error.message}`);
+            } finally {
+                hideLoading();
+                exportBtn.disabled = false;
+            }
+        }
+
+        // Function to show success message
+        function showSuccessMessage(message) {
+            // Remove any existing success messages
+            const existingMessages = document.querySelectorAll('.success-message');
+            existingMessages.forEach(msg => msg.remove());
+            
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: #4CAF50;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 5px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                font-weight: 500;
+            `;
+            successDiv.textContent = message;
+            
+            document.body.appendChild(successDiv);
+            
+            setTimeout(() => {
+                if (document.body.contains(successDiv)) {
+                    document.body.removeChild(successDiv);
+                }
+            }, 4000);
         }
 
         // Function to render the results
@@ -617,18 +832,14 @@
                 return;
             }
             
-            const desiredColumnOrder = [
-                "Row", "Actual Product", "Segment", "DP FLAG", "MotherBatchNo", "Ip Width", "Ip Thick",
-                "Mother Ip Wt", "Order_Tdc", "Op Batch No", "Actual Tdc", "Op Thk", "Op Width", "Prop Ip Wt",
-                "O/P_Wt", "Total Length", "Material Yield(%) with Zinc", "Material Yield(%) without Zinc",
-                "Start Date", "Start Time", "Shift", "Process Duration(in min)", "Unit", "Status"
-            ];
-
+            // Get column names from first record
+            const columns = Object.keys(pageData[0]);
+            
             let tableHTML = `<table class='excel-table'>
                 <thead>
                     <tr>`;
             
-            desiredColumnOrder.forEach(col => {
+            columns.forEach(col => {
                 tableHTML += `<th>${col}</th>`;
             });
             
@@ -638,7 +849,7 @@
             
             pageData.forEach(row => {
                 tableHTML += "<tr>";
-                desiredColumnOrder.forEach(col => {
+                columns.forEach(col => {
                     const cellValue = row[col] !== undefined && row[col] !== null ? row[col] : 'N/A';
                     tableHTML += `<td>${cellValue}</td>`;
                 });
@@ -679,6 +890,23 @@
             paginationDiv.innerHTML = paginationHTML;
         }
 
+        // Function to reset all filters
+        function resetFilters() {
+            unitSelect.value = '';
+            fySelect.innerHTML = '<option value="">Select FY</option>';
+            fySelect.disabled = true;
+            document.getElementById('shift').value = '';
+            document.getElementById('orderTdc').value = '';
+            document.getElementById('month').value = '';
+            document.getElementById('fromDate').value = '';
+            document.getElementById('toDate').value = '';
+            
+            resultsDiv.innerHTML = '<p class="no-data">Select Unit and FY, then click Search to load data</p>';
+            paginationDiv.innerHTML = '';
+            resultCountSpan.textContent = '0';
+            hideError();
+        }
+
         // Scroll to Top button visibility and action
         window.onscroll = function() {
             if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
@@ -701,11 +929,25 @@
             document.getElementById('toDate').valueAsDate = today;
         }
 
+        // Event listeners
+        unitSelect.addEventListener('change', updateFYOptions);
+        searchBtn.addEventListener('click', () => searchData(1));
+        resetBtn.addEventListener('click', resetFilters);
+        exportBtn.addEventListener('click', exportData);
+
+        // To Date validation
+        document.getElementById('toDate').addEventListener('change', function() {
+            const fromDate = document.getElementById('fromDate').value;
+            if (this.value && !fromDate) {
+                showError('Please select From Date first');
+                this.value = '';
+            }
+        });
+
         // Run the initial setup when page loads
         window.addEventListener('load', () => {
             initializeDates();
-            // Don't automatically search on load to avoid overwhelming with data
-            resultsDiv.innerHTML = '<p class="no-data">Adjust filters and click "Search" to load data</p>';
+            resetFilters();
         });
     </script>
 </body>
