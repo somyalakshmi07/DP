@@ -33,7 +33,7 @@ app.secret_key = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
 db_config =  {
     "host": "localhost",
     "user": "root",  # <-- change to your local MySQL user
-    "password": "Megha@2207",  # <-- change to your local MySQL password
+    "password": "Megha@22",  # <-- change to your local MySQL password
     "database": "new",
     "port": 3306
 }
