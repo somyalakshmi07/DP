@@ -14,8 +14,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import requests
 from flask_cors import CORS
 import json
+from flask import Flask, render_template, request, jsonify, send_file
+import pickle
+import numpy as np
+import re
+import sqlite3
+from datetime import datetime
+import pandas as pd
+from io import BytesIO
 
-# Initialize Flask app
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
@@ -43,14 +50,525 @@ except Exception as e:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load ML model (if available)
-try:
-    model = joblib.load('models/prod_model.joblib')
-    logger.info("ML model loaded successfully")
-except FileNotFoundError:
-    logger.warning("ML model file 'models/prod_model.joblib' not found. Using default calculations.")
-    model = None
+# Safe conversion functions
+def safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        if isinstance(value, str) and value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
+def safe_int(value, default=0):
+    try:
+        if value is None:
+            return default
+        if isinstance(value, str) and value.strip() == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def convert_to_serializable(obj):
+    if isinstance(obj, (np.integer, np.int64, np.int32, np.int8, np.int16)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (np.ndarray, np.datetime64)):
+        return obj.tolist() if hasattr(obj, 'tolist') else str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_serializable(item) for item in obj]
+    elif obj is None:
+        return None
+    elif not isinstance(obj, (str, int, float, bool)):
+        return str(obj)
+    else:
+        return obj
+
+def init_db():
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS settings
+                 (month_year TEXT PRIMARY KEY, available_time REAL)''')
+    current_month = datetime.now().strftime("%b%Y")
+    c.execute("SELECT COUNT(*) FROM settings WHERE month_year = ?", (current_month,))
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO settings (month_year, available_time) VALUES (?, ?)", 
+                 (current_month, 14400))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def extract_tdc_value(tdc_string):
+    if tdc_string is None or tdc_string == '':
+        return 0
+    tdc_str = str(tdc_string)
+    numbers = re.findall(r'\d+', tdc_str)
+    if numbers:
+        return float(numbers[0])
+    else:
+        return float(hash(tdc_str) % 1000)
+
+try:
+    with open('productivity_model.pkl', 'rb') as f:
+        model_data = pickle.load(f)
+    model = model_data['model']
+    scaler = model_data['scaler']
+    features = model_data['features']
+    target = model_data.get('target', 'Productivity(TPH)')
+    if 'label_encoder' in model_data:
+        le = model_data['label_encoder']
+    elif 'label_encoders' in model_data:
+        le = model_data['label_encoders'].get('Actual Product', None)
+    else:
+        le = None
+    print(f"Model loaded with features: {features}")
+    print(f"Model loaded with target: {target}")
+    feature_mapping = {
+        'product_type': 'Product_Type',
+        'tdc_value': 'TDC_Value', 
+        'thickness': 'CRFH thickness(mm)',
+        'zinc': 'Zinc'
+    }
+except FileNotFoundError:
+    print("Model file not found. Please train the model first.")
+    model_data = None
+    model = None
+    scaler = None
+    le = None
+    features = []
+    target = ""
+    feature_mapping = {}
+
+def get_orders_table(month_year):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute(f'''CREATE TABLE IF NOT EXISTS {table_name}
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  unit TEXT,
+                  product_type TEXT,
+                  tdc TEXT,
+                  thickness REAL,
+                  zinc REAL,
+                  quantity INTEGER,
+                  productivity REAL,
+                  required_time REAL,
+                  booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+    return table_name
+
+def get_available_time(month_year):
+    try:
+        conn = sqlite3.connect('production_planning.db')
+        c = conn.cursor()
+        c.execute("SELECT available_time FROM settings WHERE month_year = ?", (month_year,))
+        result = c.fetchone()
+        conn.close()
+        return safe_float(result[0] if result else None, 14400.0)
+    except Exception as e:
+        print(f"Error getting available time: {str(e)}")
+        return 14400.0
+
+def get_booked_time(month_year):
+    table_name = f"orders_{month_year}"
+    try:
+        conn = sqlite3.connect('production_planning.db')
+        c = conn.cursor()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not c.fetchone():
+            return 0.0
+        c.execute(f"SELECT SUM(required_time) FROM {table_name}")
+        result = c.fetchone()
+        return safe_float(result[0] if result else None, 0.0)
+    except Exception as e:
+        print(f"Error getting booked time: {str(e)}")
+        return 0.0
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+def update_available_time(month_year, available_time):
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO settings (month_year, available_time) VALUES (?, ?)",
+              (month_year, available_time))
+    conn.commit()
+    conn.close()
+
+def get_all_orders(month_year):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    try:
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        table_exists = c.fetchone()
+        if not table_exists:
+            return []
+        c.execute(f"SELECT * FROM {table_name} ORDER BY booking_date DESC")
+        columns = [description[0] for description in c.description]
+        orders = [dict(zip(columns, row)) for row in c.fetchall()]
+        return orders
+    except Exception as e:
+        print(f"Error fetching orders: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_order(month_year, order_id):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    try:
+        c.execute(f"SELECT * FROM {table_name} WHERE id = ?", (order_id,))
+        row = c.fetchone()
+        if row:
+            columns = [description[0] for description in c.description]
+            order = dict(zip(columns, row))
+        else:
+            order = None
+    except:
+        order = None
+    finally:
+        conn.close()
+    return order
+
+def update_order(month_year, order_id, unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute(f"""UPDATE {table_name} 
+                 SET unit = ?, product_type = ?, tdc = ?, thickness = ?, zinc = ?, 
+                     quantity = ?, productivity = ?, required_time = ?
+                 WHERE id = ?""",
+              (unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time, order_id))
+    conn.commit()
+    conn.close()
+
+def delete_order(month_year, order_id):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute(f"DELETE FROM {table_name} WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+def add_order(month_year, unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time):
+    table_name = f"orders_{month_year}"
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    try:
+        c.execute(f'''CREATE TABLE IF NOT EXISTS {table_name}
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      unit TEXT,
+                      product_type TEXT,
+                      tdc TEXT,
+                      thickness REAL,
+                      zinc REAL,
+                      quantity INTEGER,
+                      productivity REAL,
+                      required_time REAL,
+                      booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        c.execute(f"""INSERT INTO {table_name} 
+                     (unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time))
+        conn.commit()
+        print(f"Order added successfully to {table_name}")
+        return True
+    except Exception as e:
+        print(f"Error adding order: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def get_month_data(month_year):
+    try:
+        available_time = get_available_time(month_year)
+        booked_time = get_booked_time(month_year)
+        remaining_time = available_time - booked_time
+        return {
+            'available_time': float(available_time),
+            'booked_time': float(booked_time),
+            'remaining_time': float(remaining_time)
+        }
+    except Exception as e:
+        print(f"Error in get_month_data: {str(e)}")
+        return {
+            'available_time': 14400.0,
+            'booked_time': 0.0,
+            'remaining_time': 14400.0
+        }
+
+@app.route('/order_punch')
+def order_punch():
+    current_month = datetime.now().strftime("%b%Y")
+    available_time = get_available_time(current_month)
+    booked_time = get_booked_time(current_month)
+    remaining_time = available_time - booked_time
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute("SELECT month_year FROM settings ORDER BY month_year")
+    months = [row[0] for row in c.fetchall()]
+    conn.close()
+    orders = get_all_orders(current_month)
+    return render_template('index.html', 
+                         available_time=available_time,
+                         booked_time=booked_time,
+                         remaining_time=remaining_time,
+                         current_month=current_month,
+                         months=months,
+                         orders=orders)
+@app.route('/update_available_time', methods=['POST'])
+def update_available_time_route():
+    month_year = request.form['month_year']
+    available_time = float(request.form['available_time'])
+    update_available_time(month_year, available_time)
+    return jsonify({'success': True, 'message': 'Available time updated successfully'})
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    try:
+        unit = request.form.get('unit', '')
+        product_type = request.form.get('product_type', '')
+        tdc = request.form.get('tdc', '')
+        thickness = safe_float(request.form.get('thickness'), 0.5)
+        zinc = safe_float(request.form.get('zinc'), 130.0)
+        quantity = safe_int(request.form.get('quantity'), 1)
+        month_year = request.form.get('month_year', datetime.now().strftime("%b%Y"))
+        confirm_booking = request.form.get('confirm_booking', 'false').lower() == 'true'
+        if not all([unit, product_type, tdc]):
+            return jsonify({'error': 'Missing required fields'})
+        if thickness <= 0 or zinc <= 0 or quantity <= 0:
+            return jsonify({'error': 'Thickness, zinc coating, and quantity must be positive values'})
+        tdc_value = extract_tdc_value(tdc)
+        if le is not None:
+            try:
+                product_type_encoded = le.transform([product_type])[0]
+            except ValueError:
+                product_type_encoded = 0
+        else:
+            product_type_encoded = hash(product_type) % 1000
+        features_dict = {
+            'product_type': product_type_encoded,
+            'tdc_value': tdc_value,
+            'zinc': zinc,
+            'thickness': thickness
+        }
+        mapped_features = {feature_mapping.get(k, k): v for k, v in features_dict.items()}
+        features_df = pd.DataFrame([mapped_features], columns=features)
+        features_scaled = scaler.transform(features_df)
+        productivity = model.predict(features_scaled)[0]
+        required_time = (quantity / productivity) * 60 if productivity > 0 else 0
+        month_data = get_month_data(month_year)
+        can_book = bool(month_data['remaining_time'] >= required_time)
+        if confirm_booking and can_book:
+            success = add_order(month_year, unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time)
+            if not success:
+                return jsonify({'error': 'Failed to save order to database'})
+            month_data = get_month_data(month_year)
+        response_data = {
+            'success': True,
+            'unit': unit,
+            'product_type': product_type,
+            'tdc': tdc,
+            'thickness': thickness,
+            'zinc': zinc,
+            'quantity': quantity,
+            'productivity': round(productivity, 2),
+            'required_time': round(required_time, 2),
+            'available_time': month_data['available_time'],
+            'booked_time': month_data['booked_time'],
+            'remaining_time': month_data['remaining_time'],
+            'can_book': can_book
+        }
+        return jsonify(response_data)
+    except Exception as e:
+        import traceback
+        error_msg = f"Error in predict: {str(e)}"
+        print(error_msg)
+        print(traceback.format_exc())
+        return jsonify({'error': error_msg})
+
+@app.route('/book_order', methods=['POST'])
+def book_order():
+    try:
+        unit = request.form.get('unit', '')
+        product_type = request.form.get('product_type', '')
+        tdc = request.form.get('tdc', '')
+        thickness = safe_float(request.form.get('thickness'), 0.5)
+        zinc = safe_float(request.form.get('zinc'), 130.0)
+        quantity = safe_int(request.form.get('quantity'), 1)
+        month_year = request.form.get('month_year', datetime.now().strftime("%b%Y"))
+        if not all([unit, product_type, tdc]):
+            return jsonify({'error': 'Missing required fields'})
+        if thickness <= 0 or zinc <= 0 or quantity <= 0:
+            return jsonify({'error': 'Thickness, zinc coating, and quantity must be positive values'})
+        tdc_value = extract_tdc_value(tdc)
+        if le is not None:
+            try:
+                product_type_encoded = le.transform([product_type])[0]
+            except ValueError:
+                product_type_encoded = 0
+        else:
+            product_type_encoded = hash(product_type) % 1000
+        features_dict = {
+            'product_type': product_type_encoded,
+            'tdc_value': tdc_value,
+            'zinc': zinc,
+            'thickness': thickness
+        }
+        mapped_features = {feature_mapping.get(k, k): v for k, v in features_dict.items()}
+        features_df = pd.DataFrame([mapped_features], columns=features)
+        features_scaled = scaler.transform(features_df)
+        productivity = model.predict(features_scaled)[0]
+        required_time = (quantity / productivity) * 60 if productivity > 0 else 0
+        print(f"Booking order: {unit}, {product_type}, {quantity}, {month_year}")
+        success = add_order(month_year, unit, product_type, tdc, thickness, zinc, quantity, productivity, required_time)
+        if not success:
+            return jsonify({'error': 'Failed to add order to database'})
+        month_data = get_month_data(month_year)
+        return jsonify({
+            'success': True,
+            'message': 'Order booked successfully',
+            'available_time': month_data['available_time'],
+            'booked_time': month_data['booked_time'],
+            'remaining_time': month_data['remaining_time']
+        })
+    except Exception as e:
+        print(f"Error booking order: {e}")
+        return jsonify({'error': str(e)})
+
+@app.route('/get_orders/<month_year>')
+def get_orders(month_year):
+    try:
+        orders = get_all_orders(month_year)
+        available_time = float(get_available_time(month_year))
+        booked_time = float(get_booked_time(month_year))
+        remaining_time = float(available_time - booked_time)
+        print(f"Found {len(orders)} orders for {month_year}")
+        serializable_orders = [convert_to_serializable(order) for order in orders]
+        return jsonify({
+            'orders': serializable_orders,
+            'available_time': available_time,
+            'booked_time': booked_time,
+            'remaining_time': remaining_time
+        })
+    except Exception as e:
+        print(f"Error in get_orders route: {e}")
+        return jsonify({
+            'error': f'Failed to fetch orders: {str(e)}',
+            'orders': [],
+            'available_time': 0,
+            'booked_time': 0,
+            'remaining_time': 0
+        }), 500
+
+@app.route('/get_order/<month_year>/<int:order_id>')
+def get_order_route(month_year, order_id):
+    order = get_order(month_year, order_id)
+    if order:
+        serializable_order = convert_to_serializable(order)
+        return jsonify(serializable_order)
+    else:
+        return jsonify({'error': 'Order not found'}), 404
+
+@app.route('/update_order/<month_year>/<int:order_id>', methods=['POST'])
+def update_order_route(month_year, order_id):
+    try:
+        unit = request.form.get('unit', '')
+        product_type = request.form.get('product_type', '')
+        tdc_input = request.form.get('tdc', '')
+        thickness = safe_float(request.form.get('thickness'), 0.5)
+        zinc = safe_float(request.form.get('zinc'), 130.0)
+        quantity = safe_int(request.form.get('quantity'), 1)
+        if not all([unit, product_type, tdc_input]):
+            return jsonify({'error': 'Missing required fields'})
+        if thickness <= 0 or zinc <= 0 or quantity <= 0:
+            return jsonify({'error': 'Thickness, zinc coating, and quantity must be positive values'})
+        tdc_value = extract_tdc_value(tdc_input)
+        if le is not None:
+            try:
+                product_type_encoded = le.transform([product_type])[0]
+            except ValueError:
+                product_type_encoded = 0
+        else:
+            product_type_encoded = hash(product_type) % 1000
+        features_dict = {
+            'product_type': product_type_encoded,
+            'tdc_value': tdc_value,
+            'zinc': zinc,
+            'thickness': thickness
+        }
+        mapped_features = {feature_mapping.get(k, k): v for k, v in features_dict.items()}
+        features_df = pd.DataFrame([mapped_features], columns=features)
+        features_scaled = scaler.transform(features_df)
+        productivity = model.predict(features_scaled)[0]
+        required_time = (quantity / productivity) * 60 if productivity > 0 else 0
+        update_order(month_year, order_id, unit, product_type, tdc_input, thickness, zinc, quantity, productivity, required_time)
+        month_data = get_month_data(month_year)
+        return jsonify({
+            'success': True,
+            'message': 'Order updated successfully',
+            'productivity': productivity,
+            'required_time': required_time,
+            'available_time': month_data['available_time'],
+            'booked_time': month_data['booked_time'],
+            'remaining_time': month_data['remaining_time']
+        })
+    except Exception as e:
+        error_msg = f"Error: {str(e)}"
+        print(error_msg)
+        return jsonify({'error': error_msg}), 500
+
+@app.route('/delete_order/<month_year>/<int:order_id>', methods=['DELETE'])
+def delete_order_route(month_year, order_id):
+    delete_order(month_year, order_id)
+    month_data = get_month_data(month_year)
+    orders = get_all_orders(month_year)
+    serializable_orders = [convert_to_serializable(order) for order in orders]
+    return jsonify({
+        'success': True,
+        'available_time': month_data['available_time'],
+        'booked_time': month_data['booked_time'],
+        'remaining_time': month_data['remaining_time'],
+        'orders': serializable_orders
+    })
+
+@app.route('/export_orders/<month_year>')
+def export_orders(month_year):
+    orders = get_all_orders(month_year)
+    df = pd.DataFrame(orders)
+    if 'id' in df.columns:
+        df = df.drop('id', axis=1)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name=f'Orders_{month_year}', index=False)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'orders_{month_year}.xlsx'
+    )
+
+@app.route('/get_available_months')
+def get_available_months():
+    conn = sqlite3.connect('production_planning.db')
+    c = conn.cursor()
+    c.execute("SELECT month_year FROM settings ORDER BY month_year")
+    months = [row[0] for row in c.fetchall()]
+    conn.close()
+    return jsonify({'months': months})
 # Helper functions
 def encode_product_type(product_type):
     """Placeholder for encoding product_type. Implement your logic here."""
@@ -269,254 +787,6 @@ def productivity():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template("productivity.html")
-
-# Order Punch System Routes
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Predict productivity and required time using all relevant features"""
-    try:
-        data = request.get_json()
-        logger.info(f"Received prediction request: {data}")
-
-        # Validate all required fields
-        required_fields = {
-            'product_type': str,
-            'tdc': str,
-            'thickness': float,
-            'width': float,
-            'zinc_coating': float,
-            'quantity': int
-        }
-        
-        # Validate and convert inputs
-        features = {}
-        for field, field_type in required_fields.items():
-            if field not in data:
-                raise ValueError(f"Missing required field: {field}")
-            try:
-                features[field] = field_type(data[field])
-            except (ValueError, TypeError):
-                raise ValueError(f"Invalid value for {field}")
-
-        logger.info(f"Validated features: {features}")
-
-        if model:
-            # Prepare feature array in correct order
-            product_type_encoded = encode_product_type(features['product_type'])
-            tdc_encoded = encode_tdc(features['tdc'])
-            
-            # Correct array structure - single list of features
-            model_input = np.array([
-                features['thickness'],
-                features['width'],
-                features['zinc_coating'],
-                product_type_encoded,
-                tdc_encoded
-            ]).reshape(1, -1)  # Reshape to 2D array for prediction
-            
-            logger.info(f"Model input features: {model_input}")
-
-            # Get prediction
-            productivity = model.predict(model_input)[0]
-            required_time = features['quantity'] / productivity if productivity > 0 else 0
-        else:
-            # Fallback calculation
-            logger.warning("Using fallback calculation (no model)")
-            productivity = 1.0
-            required_time = features['quantity']
-
-        logger.info(f"Prediction results - Productivity: {productivity}, Required Time: {required_time}")
-
-        return jsonify({
-            'productivity': round(productivity, 2),
-            'required_time': round(required_time, 2)
-        })
-
-    except ValueError as ve:
-        logger.error(f"Validation error: {str(ve)}")
-        return jsonify({'error': str(ve)}), 400
-    except Exception as e:
-        logger.error(f"Prediction error: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({'error': 'Internal prediction error'}), 500
-
-@app.route('/order_punch', methods=['GET', 'POST'])
-def order_punch():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = None
-    try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        table = get_month_table(cursor)
-        time_stats = get_time_stats(cursor, table)
-
-        if request.method == 'POST':
-            form = request.form
-            logger.info(f"Form data received: {dict(form)}")
-
-            try:
-                # Validate and convert inputs
-                prediction_data = {
-                    'product_type': form['product_type'],
-                    'tdc': form['tdc'],
-                    'thickness': float(form['thickness']),
-                    'width': float(form['width']),
-                    'zinc_coating': float(form['zinc_coating']),
-                    'quantity': int(form['quantity'])
-                }
-
-                # Get prediction
-                response = requests.post(
-                    url_for('predict', _external=True),
-                    json=prediction_data,
-                    timeout=5
-                )
-
-                if response.status_code != 200:
-                    error_msg = response.json().get('error', 'Prediction failed')
-                    raise ValueError(error_msg)
-
-                prediction = response.json()
-                
-                # Verify available time
-                if prediction['required_time'] > time_stats['left_time']:
-                    raise ValueError("Not enough available time for this order")
-
-                # Insert order
-                cursor.execute(f"""
-                    INSERT INTO `{table}` 
-                    (product_type, tdc, thickness, width, zinc_coating, 
-                     quantity, required_time, productivity)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    prediction_data['product_type'],
-                    prediction_data['tdc'],
-                    prediction_data['thickness'],
-                    prediction_data['width'],
-                    prediction_data['zinc_coating'],
-                    prediction_data['quantity'],
-                    prediction['required_time'],
-                    prediction['productivity']
-                ))
-                conn.commit()
-                flash('Order booked successfully!', 'success')
-
-            except ValueError as ve:
-                flash(f'Error: {str(ve)}', 'danger')
-            except Exception as e:
-                logger.error(f"Order submission error: {str(e)}")
-                flash('Error submitting order. Please try again.', 'danger')
-
-            return redirect(url_for('order_punch'))
-
-        # GET request - show existing orders
-        cursor.execute(f"SELECT * FROM `{table}` ORDER BY id DESC")
-        records = cursor.fetchall()
-
-        return render_template("order_punch.html",
-                           records=records,
-                           available_time=time_stats['available_time'],
-                           booked_time=time_stats['booked_time'],
-                           left_time=time_stats['left_time'],
-                           table=table)
-
-    except Exception as e:
-        logger.error(f"Order punch error: {str(e)}")
-        flash('An error occurred', 'danger')
-        return redirect(url_for('order_punch'))
-    finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.route('/order/delete/<int:id>')
-def delete_order(id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = None
-    try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        table = get_month_table(cursor)
-        cursor.execute(f"DELETE FROM `{table}` WHERE id = %s", (id,))
-        conn.commit()
-        flash('Order deleted successfully', 'success')
-    except Exception as e:
-        logger.error(f"Delete error: {str(e)}")
-        flash('Error deleting order', 'danger')
-    finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
-    return redirect(url_for('order_punch'))
-
-@app.route('/order/edit/<int:id>', methods=['GET', 'POST'])
-def edit_order(id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = None
-    try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        table = get_month_table(cursor)
-
-        if request.method == 'POST':
-            form = request.form
-            
-            # Get prediction
-            try:
-                response = requests.post(
-                    url_for('predict', _external=True),
-                    json={
-                        'product_type': form['product_type'],
-                        'tdc': form['tdc'],
-                        'thickness': float(form['thickness']),
-                        'width': float(form['width']),
-                        'zinc_coating': float(form['zinc_coating']),
-                        'quantity': int(form['quantity']),
-                    }
-                )
-                prediction = response.json()
-                if 'error' in prediction:
-                    raise ValueError(prediction['error'])
-                    
-                productivity = prediction['productivity']
-                required_time = prediction['required_time']
-            except Exception as e:
-                logger.warning(f"Using fallback calculation: {str(e)}")
-                productivity = 1.0
-                required_time = float(form['quantity'])
-
-            cursor.execute(f"""
-                UPDATE `{table}` SET
-                product_type=%s, tdc=%s, thickness=%s, width=%s,
-                zinc_coating=%s, quantity=%s, required_time=%s, productivity=%s
-                WHERE id=%s
-            """, (
-                form['product_type'], form['tdc'], float(form['thickness']),
-                float(form['width']), form['zinc_coating'], int(form['quantity']),
-                required_time, productivity, id
-            ))
-            conn.commit()
-            flash('Order updated successfully!', 'success')
-            return redirect(url_for('order_punch'))
-
-        # Get order details
-        cursor.execute(f"SELECT * FROM `{table}` WHERE id = %s", (id,))
-        order = cursor.fetchone()
-        return render_template("edit.html", order=order)
-
-    except Exception as e:
-        logger.error(f"Edit error: {str(e)}")
-        flash('Error updating order', 'danger')
-        return redirect(url_for('order_punch'))
-    finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
 
 
 @app.route('/export', methods=['POST'])
