@@ -433,6 +433,28 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             font-weight: 500;
         }
+        /* Current table styles */
+th, td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e1e1e1;
+    text-align: left;
+    font-size: 14px;
+}
+
+/* NEW: Fixed column sizing */
+table {
+    table-layout: fixed; /* Makes columns consistent */
+    width: 100%;
+}
+
+th, td {
+    width: 120px; /* Fixed width for all columns */
+    max-width: 120px;
+    min-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>

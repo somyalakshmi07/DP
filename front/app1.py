@@ -713,6 +713,14 @@ def search_data():
 
         logger.info(f"Using table: {table_name}")
 
+        # Get the original column order from the database
+        cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        columns_info = cursor.fetchall()
+        original_column_order = [col['Field'] for col in columns_info]
+        
+        # Build SELECT clause with original column order
+        select_columns = ", ".join([f"`{col}`" for col in original_column_order])
+
         # Build query parts
         query_parts = []
         params = []
@@ -759,8 +767,8 @@ def search_data():
             query_parts.append("`Shift` = %s")
             params.append(shift)
 
-        # Build the query
-        base_query = f"SELECT * FROM `{table_name}`"
+        # Build the query with original column order
+        base_query = f"SELECT {select_columns} FROM `{table_name}`"
         if query_parts:
             base_query += " WHERE " + " AND ".join(query_parts)
         base_query += " ORDER BY STR_TO_DATE(`Start Date`, '%d-%m-%Y') DESC, `Start Time` DESC LIMIT 500"
@@ -769,15 +777,26 @@ def search_data():
         logger.info(f"With parameters: {params}")
 
         cursor.execute(base_query, tuple(params))
-        results = [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
 
-        # Convert datetime to string for JSON
-        for row in results:
-            for key, value in row.items():
-                if isinstance(value, datetime):
-                    row[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, bytes):
-                    row[key] = value.decode('utf-8')
+        # Convert datetime to string for JSON and preserve column order
+        results = []
+        for row in rows:
+            ordered_row = {}
+            # Ensure we iterate in the original column order
+            for column_name in original_column_order:
+                if column_name in row:  # Check if column exists in the result
+                    value = row[column_name]
+                    if isinstance(value, datetime):
+                        ordered_row[column_name] = value.strftime('%Y-%m-%d %H:%M:%S')
+                    elif isinstance(value, bytes):
+                        ordered_row[column_name] = value.decode('utf-8')
+                    else:
+                        ordered_row[column_name] = value
+                else:
+                    # Handle case where column might not be in result
+                    ordered_row[column_name] = None
+            results.append(ordered_row)
 
         logger.info(f"Found {len(results)} results from table {table_name}")
         return jsonify(results)
@@ -793,7 +812,6 @@ def search_data():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
-
 @app.route('/summary', methods=['GET'])
 def summary():
     conn = None
