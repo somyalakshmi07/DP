@@ -37,7 +37,7 @@ db_config =  {
     "database": "new",
     "port": 3306
 }
-
+# ok im in.
 # Create connection pool
 try:
     db_pool = pooling.MySQLConnectionPool(**db_config)
