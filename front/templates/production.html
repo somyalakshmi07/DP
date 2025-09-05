@@ -455,6 +455,110 @@ th, td {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Upload Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 25px;
+    border-radius: 8px;
+    width: 500px;
+    max-width: 90%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e1e1e1;
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    color: #1D2B36;
+    margin: 0;
+}
+
+.close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #000;
+}
+
+.modal-body {
+    margin-bottom: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.upload-step {
+    display: none;
+}
+
+.upload-step.active {
+    display: block;
+}
+
+.file-input-container {
+    margin-bottom: 15px;
+}
+
+.file-input-label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.file-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.upload-status {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    display: none;
+}
+
+.upload-status.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    display: block;
+}
+
+.upload-status.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    display: block;
+}
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -481,6 +585,7 @@ th, td {
             <div class="page-header">
                 <h1>Production Data</h1>
                 <div class="header-actions">
+                    <button class="btn" id="uploadBtn"><i class="fas fa-upload"></i> Upload</button>
                     <button class="btn" id="exportBtn"><i class="fas fa-download"></i> Export</button>
                 </div>
             </div>
@@ -579,398 +684,741 @@ th, td {
             </div>
         </div>
 
+        <!-- Upload Modal -->
+        <div id="uploadModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">Upload Production Data</h2>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="step1" class="upload-step active">
+                        <div class="filter-group">
+                            <label for="uploadUnit">Select Unit: *</label>
+                            <select id="uploadUnit" name="unit" required>
+                                <option value="">Select Unit</option>
+                                <option value="CGL-2">CGL-2</option>
+                                <option value="CGL-3">CGL-3</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="step2" class="upload-step">
+                        <div class="filter-group">
+                            <label for="uploadAction">Select Action: *</label>
+                            <select id="uploadAction" name="action" required>
+                                <option value="">Select Action</option>
+                                <option value="add">Add New Year</option>
+                                <option value="update">Update Existing Year</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="step3-add" class="upload-step">
+                        <div class="filter-group">
+                            <label for="newFY">Enter Financial Year: *</label>
+                            <input type="text" id="newFY" name="newFY" placeholder="e.g., FY24" pattern="FY\d{2}" title="Format: FY followed by 2 digits (e.g., FY24)">
+                        </div>
+                    </div>
+                    
+                    <div id="step3-update" class="upload-step">
+                        <div class="filter-group">
+                            <label for="existingFY">Select Financial Year: *</label>
+                            <select id="existingFY" name="existingFY" required>
+                                <option value="">Select FY</option>
+                                <!-- Will be populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="step4" class="upload-step">
+                        <div class="file-input-container">
+                            <label class="file-input-label" for="csvFile">Select CSV File: *</label>
+                            <input type="file" id="csvFile" name="csvFile" accept=".csv" class="file-input" required>
+                            <small id="fileHelp" class="form-text text-muted">
+                                File name must follow the pattern: 
+                                <span id="fileNamePattern">22datcsv for CGL-2, 22datacgl for CGL-3 (where 22 is the last two digits of FY)</span>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div id="uploadStatus" class="upload-status"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="prevBtn" class="btn-outline" style="display: none;">Previous</button>
+                    <button id="nextBtn" class="btn">Next</button>
+                    <button id="uploadSubmitBtn" class="btn" style="display: none;">Upload</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Scroll to Top Button -->
         <button id="scrollToTopBtn" title="Go to top"><i class="fas fa-arrow-up"></i></button>
     </div>
 
+    <!-- <form id="uploadForm">
+        <div class="mb-3">
+            <label for="unit" class="form-label">Select Unit: *</label>
+            <select class="form-select" id="unit" name="unit" required>
+                <option value="">-- Select Unit --</option>
+                <option value="CGL-2">CGL-2</option>
+                <option value="CGL-3">CGL-3</option>
+            </select>
+        </div>
+        <button type="button" onclick="submitForm()" class="btn btn-primary">Next</button>
+    </form> -->
+
     <script>
-        // Configuration
-        const ITEMS_PER_PAGE = 50;
-        let currentPage = 1;
-        let totalPages = 1;
-        let currentData = [];
+    // Configuration
+    const ITEMS_PER_PAGE = 50;
+    let currentPage = 1;
+    let totalPages = 1;
+    let currentData = [];
+    let currentUploadStep = 1;
+    let selectedUnit = '';
+    let selectedAction = '';
 
-        // DOM Elements
-        const resultsDiv = document.getElementById('results');
-        const paginationDiv = document.getElementById('pagination');
-        const resultCountSpan = document.getElementById('resultCount');
-        const loadingDiv = document.querySelector('.loading');
-        const scrollToTopBtn = document.getElementById('scrollToTopBtn');
-        const unitSelect = document.getElementById('unit');
-        const fySelect = document.getElementById('financialYear');
-        const searchBtn = document.getElementById('searchBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const exportBtn = document.getElementById('exportBtn');
-        const errorContainer = document.getElementById('errorContainer');
+    // DOM Elements
+    const resultsDiv = document.getElementById('results');
+    const paginationDiv = document.getElementById('pagination');
+    const resultCountSpan = document.getElementById('resultCount');
+    const loadingDiv = document.querySelector('.loading');
+    const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+    const unitSelect = document.getElementById('unit');
+    const fySelect = document.getElementById('financialYear');
+    const searchBtn = document.getElementById('searchBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const errorContainer = document.getElementById('errorContainer');
 
-        // Unit to FY mapping
-        const unitFYMapping = {
-            'CGL-2': ['FY22', 'FY23', 'FY24', 'FY25'],
-            'CGL-3': ['FY24', 'FY25']
-        };
+    // Modal Elements
+    const uploadModal = document.getElementById('uploadModal');
+    const closeModal = document.querySelector('.close');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const uploadSubmitBtn = document.getElementById('uploadSubmitBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    
+    // Upload Form Elements
+    const uploadUnit = document.getElementById('uploadUnit');
+    const uploadAction = document.getElementById('uploadAction');
+    const newFY = document.getElementById('newFY');
+    const existingFY = document.getElementById('existingFY');
+    const csvFile = document.getElementById('csvFile');
+    const fileNamePattern = document.getElementById('fileNamePattern');
 
-        // Function to show error message
-        function showError(message) {
-            errorContainer.textContent = message;
-            errorContainer.style.display = 'block';
+    // Unit to FY mapping
+    const unitFYMapping = {
+        'CGL-2': ['FY22', 'FY23', 'FY24', 'FY25'],
+        'CGL-3': ['FY22', 'FY23','FY24', 'FY25']
+    };
+
+
+    // Function to show error message
+    function showError(message) {
+        errorContainer.textContent = message;
+        errorContainer.style.display = 'block';
+    }
+
+    // Function to hide error message
+    function hideError() {
+        errorContainer.style.display = 'none';
+    }
+
+    // Function to update FY options based on selected unit
+    function updateFYOptions() {
+        const unit = unitSelect.value;
+        fySelect.innerHTML = '<option value="">Select FY</option>';
+        
+        if (unit && unitFYMapping[unit]) {
+            fySelect.disabled = false;
+            unitFYMapping[unit].forEach(fy => {
+                const option = document.createElement('option');
+                option.value = fy;
+                option.textContent = fy;
+                fySelect.appendChild(option);
+            });
+        } else {
+            fySelect.disabled = true;
         }
+    }
 
-        // Function to hide error message
-        function hideError() {
-            errorContainer.style.display = 'none';
+    // Function to validate filters
+    function validateFilters() {
+        hideError();
+        
+        if (!unitSelect.value) {
+            showError('Please select a Unit');
+            return false;
         }
+        
+        if (!fySelect.value) {
+            showError('Please select a Financial Year');
+            return false;
+        }
+        
+        const fromDate = document.getElementById('fromDate').value;
+        const toDate = document.getElementById('toDate').value;
+        
+        if (toDate && !fromDate) {
+            showError('From Date is required when To Date is selected');
+            return false;
+        }
+        
+        return true;
+    }
 
-        // Function to update FY options based on selected unit
-        function updateFYOptions() {
-            const unit = unitSelect.value;
-            fySelect.innerHTML = '<option value="">Select FY</option>';
+    // Function to show loading state
+    function showLoading() {
+        loadingDiv.style.display = 'block';
+        exportBtn.classList.add('btn-loading');
+        exportBtn.disabled = true;
+    }
+
+    // Function to hide loading state
+    function hideLoading() {
+        loadingDiv.style.display = 'none';
+        exportBtn.classList.remove('btn-loading');
+        exportBtn.disabled = false;
+    }
+
+    // Function to search and display results
+    async function searchData(page = 1) {
+        if (!validateFilters()) {
+            return;
+        }
+        
+        currentPage = page;
+        
+        const unit = unitSelect.value;
+        const fy = fySelect.value;
+        const shift = document.getElementById('shift').value;
+        const orderTdc = document.getElementById('orderTdc').value.trim(); // Trim whitespace
+        const month = document.getElementById('month').value;
+        const monthStr = month ? String(parseInt(month)).padStart(1, '0') : null; // Zero-padded month
+        const fromDate = document.getElementById('fromDate').value;
+        const toDate = document.getElementById('toDate').value;
+
+        showLoading();
+
+        try {
+            const response = await fetch('/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    unit,
+                    financialYear: fy,
+                    shift,
+                    orderTdc: orderTdc || null,
+                    month,
+                    fromDate, // yyyy-mm-dd format
+                    toDate    // yyyy-mm-dd format
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
             
-            if (unit && unitFYMapping[unit]) {
-                fySelect.disabled = false;
-                unitFYMapping[unit].forEach(fy => {
-                    const option = document.createElement('option');
-                    option.value = fy;
-                    option.textContent = fy;
-                    fySelect.appendChild(option);
-                });
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            currentData = data;
+            totalPages = Math.ceil(data.length / ITEMS_PER_PAGE);
+            
+            renderResults(data);
+            renderPagination();
+            
+            resultCountSpan.textContent = data.length;
+            
+        } catch (error) {
+            showError(`Error loading data: ${error.message}`);
+            console.error('Search error:', error);
+        } finally {
+            hideLoading();
+        }
+    }
+
+    // Function to export data
+    async function exportData() {
+        if (!validateFilters()) {
+            return;
+        }
+        
+        const unit = unitSelect.value;
+        const fy = fySelect.value;
+        const shift = document.getElementById('shift').value;
+        const orderTdc = document.getElementById('orderTdc').value.trim();
+        const month = document.getElementById('month').value;
+        const fromDate = document.getElementById('fromDate').value;
+        const toDate = document.getElementById('toDate').value;
+
+        showLoading();
+        exportBtn.disabled = true;
+
+        try {
+            const response = await fetch('/export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    unit,
+                    financialYear: fy,
+                    shift,
+                    orderTdc: orderTdc || null,
+                    month,
+                    fromDate,
+                    toDate
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Export failed: ${response.statusText}`);
+            }
+
+            // Handle the Excel file download
+            const blob = await response.blob();
+    
+            // Check if blob is valid
+            if (blob.size === 0) {
+                throw new Error('Empty file received from server');
+            }
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            
+            // Create filename
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.download = `production_data_${unit}_${fy}_${timestamp}.xlsx`;
+            
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+    
+            // Show success message
+            showSuccessMessage('Export completed successfully!');
+    
+        } catch (error) {
+            console.error('Export error:', error);
+            showError(`Export failed: ${error.message}`);
+        } finally {
+            hideLoading();
+            exportBtn.disabled = false;
+        }
+    }
+
+    // Function to show success message
+    function showSuccessMessage(message) {
+        // Remove any existing success messages
+        const existingMessages = document.querySelectorAll('.success-message');
+        existingMessages.forEach(msg => msg.remove());
+        
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-message';
+        successDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-weight: 500;
+        `;
+        successDiv.textContent = message;
+        
+        document.body.appendChild(successDiv);
+        
+        setTimeout(() => {
+            if (document.body.contains(successDiv)) {
+                document.body.removeChild(successDiv);
+            }
+        }, 4000);
+    }
+
+    // Function to render the results
+    function renderResults(data) {
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, data.length);
+        const pageData = data.slice(startIndex, endIndex);
+        
+        if (pageData.length === 0) {
+            resultsDiv.innerHTML = '<p class="no-data">No results found matching your criteria</p>';
+            return;
+        }
+        
+        // Get column names from first record
+        const columns = Object.keys(pageData[0]);
+        
+        let tableHTML = `<table class='excel-table'>
+            <thead>
+                <tr>`;
+        
+        columns.forEach(col => {
+            tableHTML += `<th>${col}</th>`;
+        });
+        
+        tableHTML += `</tr>
+            </thead>
+            <tbody>`;
+        
+        pageData.forEach(row => {
+            tableHTML += "<tr>";
+            columns.forEach(col => {
+                const cellValue = row[col] !== undefined && row[col] !== null ? row[col] : 'N/A';
+                tableHTML += `<td>${cellValue}</td>`;
+            });
+            tableHTML += "</tr>";
+        });
+        
+        tableHTML += "</tbody></table>";
+        resultsDiv.innerHTML = tableHTML;
+    }
+
+    // Function to render pagination controls
+    function renderPagination() {
+        if (totalPages <= 1) {
+            paginationDiv.innerHTML = '';
+            return;
+        }
+        
+        let paginationHTML = '';
+        
+        // Previous button
+        paginationHTML += `<button class="btn-outline" ${currentPage === 1 ? 'disabled' : ''} onclick="searchData(${currentPage - 1})">
+            <i class="fas fa-chevron-left"></i>
+        </button>`;
+        
+        // Page numbers
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            paginationHTML += `<button class="${i === currentPage ? 'active' : 'btn-outline'}" onclick="searchData(${i})">${i}</button>`;
+        }
+        
+        // Next button
+        paginationHTML += `<button class="btn-outline" ${currentPage === totalPages ? 'disabled' : ''} onclick="searchData(${currentPage + 1})">
+            <i class="fas fa-chevron-right"></i>
+        </button>`;
+        
+        paginationDiv.innerHTML = paginationHTML;
+    }
+
+    // Function to reset all filters
+    function resetFilters() {
+        unitSelect.value = '';
+        fySelect.innerHTML = '<option value="">Select FY</option>';
+        fySelect.disabled = true;
+        document.getElementById('shift').value = '';
+        document.getElementById('orderTdc').value = '';
+        document.getElementById('month').value = '';
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        
+        resultsDiv.innerHTML = '<p class="no-data">Select Unit and FY, then click Search to load data</p>';
+        paginationDiv.innerHTML = '';
+        resultCountSpan.textContent = '0';
+        hideError();
+    }
+
+    // Upload Modal Functions
+    function showUploadModal() {
+        uploadModal.style.display = 'block';
+        resetUploadForm();
+    }
+
+    function closeUploadModal() {
+        uploadModal.style.display = 'none';
+    }
+
+    function resetUploadForm() {
+        currentUploadStep = 1;
+        selectedUnit = '';
+        selectedAction = '';
+        uploadUnit.value = '';
+        uploadAction.value = '';
+        newFY.value = '';
+        existingFY.innerHTML = '<option value="">Select FY</option>';
+        csvFile.value = '';
+        uploadStatus.className = 'upload-status';
+        uploadStatus.textContent = '';
+        
+        // Show/hide steps
+        document.querySelectorAll('.upload-step').forEach(step => {
+            step.style.display = 'none';
+        });
+        document.getElementById('step1').style.display = 'block';
+        
+        // Update button visibility
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'block';
+        uploadSubmitBtn.style.display = 'none';
+    }
+
+    function updateUploadStep() {
+        // Hide all steps
+        document.querySelectorAll('.upload-step').forEach(step => {
+            step.style.display = 'none';
+        });
+        
+        // Show current step
+        if (currentUploadStep === 1) {
+            document.getElementById('step1').style.display = 'block';
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'block';
+            uploadSubmitBtn.style.display = 'none';
+        } else if (currentUploadStep === 2) {
+            document.getElementById('step2').style.display = 'block';
+            prevBtn.style.display = 'block';
+            nextBtn.style.display = 'block';
+            uploadSubmitBtn.style.display = 'none';
+        } else if (currentUploadStep === 3) {
+            if (selectedAction === 'add') {
+                document.getElementById('step3-add').style.display = 'block';
+                fileNamePattern.textContent = `${selectedUnit === 'CGL-2' ? '22datcsv' : '22datacgl'} (where 22 is the last two digits of FY)`;
             } else {
-                fySelect.disabled = true;
+                document.getElementById('step3-update').style.display = 'block';
+                // Populate existing FY dropdown
+                populateExistingFY();
+                fileNamePattern.textContent = `${selectedUnit === 'CGL-2' ? '22datcsv' : '22datacgl'} (where 22 is the last two digits of FY)`;
             }
+            prevBtn.style.display = 'block';
+            nextBtn.style.display = 'block';
+            uploadSubmitBtn.style.display = 'none';
+        } else if (currentUploadStep === 4) {
+            document.getElementById('step4').style.display = 'block';
+            prevBtn.style.display = 'block';
+            nextBtn.style.display = 'none';
+            uploadSubmitBtn.style.display = 'block';
         }
+    }
 
-        // Function to validate filters
-        function validateFilters() {
-            hideError();
-            
-            if (!unitSelect.value) {
-                showError('Please select a Unit');
+    async function populateExistingFY() {
+    if (!selectedUnit) return;
+    
+    try {
+        const response = await fetch('/get-available-fy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ unit: selectedUnit })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            existingFY.innerHTML = '<option value="">Select FY</option>';
+            data.fyList.forEach(fy => {
+                const option = document.createElement('option');
+                option.value = fy;
+                option.textContent = fy;
+                existingFY.appendChild(option);
+            });
+        } else {
+            console.error('Failed to fetch available FY');
+        }
+    } catch (error) {
+        console.error('Error fetching available FY:', error);
+    }
+}
+
+    function validateCurrentStep() {
+        if (currentUploadStep === 1) {
+            if (!uploadUnit.value) {
+                showUploadError('Please select a unit');
+                return false;
+            }
+            selectedUnit = uploadUnit.value;
+            return true;
+        } else if (currentUploadStep === 2) {
+            if (!uploadAction.value) {
+                showUploadError('Please select an action');
+                return false;
+            }
+            selectedAction = uploadAction.value;
+            return true;
+        } else if (currentUploadStep === 3) {
+            if (selectedAction === 'add') {
+                if (!newFY.value || !newFY.value.match(/^FY\d{2}$/i)) {
+                    showUploadError('Please enter a valid financial year (e.g., FY24)');
+                    return false;
+                }
+                return true;
+            } else {
+                if (!existingFY.value) {
+                    showUploadError('Please select a financial year');
+                    return false;
+                }
+                return true;
+            }
+        } else if (currentUploadStep === 4) {
+            if (!csvFile.files || csvFile.files.length === 0) {
+                showUploadError('Please select a CSV file');
                 return false;
             }
             
-            if (!fySelect.value) {
-                showError('Please select a Financial Year');
-                return false;
-            }
+            // Validate file name pattern
+            const fileName = csvFile.files[0].name;
+            const financialYear = selectedAction === 'add' ? newFY.value : existingFY.value;
+            const expectedSuffix = selectedUnit === 'CGL-2' ? 'datcsv' : 'datacgl';
+            const expectedFileName = `${financialYear.substring(2)}${expectedSuffix}.csv`;
             
-            const fromDate = document.getElementById('fromDate').value;
-            const toDate = document.getElementById('toDate').value;
-            
-            if (toDate && !fromDate) {
-                showError('From Date is required when To Date is selected');
+            if (fileName !== expectedFileName) {
+                showUploadError(`File name must be ${expectedFileName}`);
                 return false;
             }
             
             return true;
         }
+        return true;
+    }
 
-        // Function to show loading state
-        function showLoading() {
-            loadingDiv.style.display = 'block';
-            exportBtn.classList.add('btn-loading');
-            exportBtn.disabled = true;
-        }
+    function showUploadError(message) {
+        uploadStatus.className = 'upload-status error';
+        uploadStatus.textContent = message;
+    }
 
-        // Function to hide loading state
-        function hideLoading() {
-            loadingDiv.style.display = 'none';
-            exportBtn.classList.remove('btn-loading');
-            exportBtn.disabled = false;
-        }
+    function showUploadSuccess(message) {
+        uploadStatus.className = 'upload-status success';
+        uploadStatus.textContent = message;
+    }
 
-        // Function to search and display results
-        async function searchData(page = 1) {
-            if (!validateFilters()) {
-                return;
-            }
-            
-            currentPage = page;
-            
-            const unit = unitSelect.value;
-            const fy = fySelect.value;
-            const shift = document.getElementById('shift').value;
-            const orderTdc = document.getElementById('orderTdc').value.trim(); // Trim whitespace
-            const month = document.getElementById('month').value;
-            const monthStr = month ? String(parseInt(month)).padStart(1, '0') : null; // Zero-padded month
-            const fromDate = document.getElementById('fromDate').value;
-            const toDate = document.getElementById('toDate').value;
-
-            showLoading();
-
-            try {
-                const response = await fetch('/search', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        unit,
-                        financialYear: fy,
-                        shift,
-                        orderTdc: orderTdc || null,
-                        month,
-                        fromDate, // yyyy-mm-dd format
-                        toDate    // yyyy-mm-dd format
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                currentData = data;
-                totalPages = Math.ceil(data.length / ITEMS_PER_PAGE);
-                
-                renderResults(data);
-                renderPagination();
-                
-                resultCountSpan.textContent = data.length;
-                
-            } catch (error) {
-                showError(`Error loading data: ${error.message}`);
-                console.error('Search error:', error);
-            } finally {
-                hideLoading();
-            }
-        }
-
-        // Function to export data
-        async function exportData() {
-            if (!validateFilters()) {
-                return;
-            }
-            
-            const unit = unitSelect.value;
-            const fy = fySelect.value;
-            const shift = document.getElementById('shift').value;
-            const orderTdc = document.getElementById('orderTdc').value.trim();
-            const month = document.getElementById('month').value;
-            const fromDate = document.getElementById('fromDate').value;
-            const toDate = document.getElementById('toDate').value;
-
-            showLoading();
-            exportBtn.disabled = true;
-
-            try {
-                const response = await fetch('/export', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        unit,
-                        financialYear: fy,
-                        shift,
-                        orderTdc: orderTdc || null,
-                        month,
-                        fromDate,
-                        toDate
-                    })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Export failed: ${response.statusText}`);
-                }
-
-                // Handle the Excel file download
-                const blob = await response.blob();
+    async function submitUpload() {
+    const financialYear = selectedAction === 'add' ? newFY.value : existingFY.value;
+    const file = csvFile.files[0];
+    
+    const formData = new FormData();
+    formData.append('unit', selectedUnit);
+    formData.append('financialYear', financialYear);
+    formData.append('action', selectedAction);
+    formData.append('csvFile', file);
+    
+    try {
+        showUploadSuccess('Uploading file...');
+        uploadSubmitBtn.disabled = true;
         
-                // Check if blob is valid
-                if (blob.size === 0) {
-                    throw new Error('Empty file received from server');
-                }
-
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                // Create filename
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                a.download = `production_data_${unit}_${fy}_${timestamp}.xlsx`;
-                
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
+        const response = await fetch('/upload-data', {
+            method: 'POST',
+            body: formData
+        });
         
-                // Show success message
-                showSuccessMessage('Export completed successfully!');
+        const result = await response.json();
         
-            } catch (error) {
-                console.error('Export error:', error);
-                showError(`Export failed: ${error.message}`);
-            } finally {
-                hideLoading();
-                exportBtn.disabled = false;
+        if (response.ok && result.success) {
+            showUploadSuccess(`${result.message}. File saved at: ${result.file_path}`);
+            
+            // Add the new FY to the dropdown if it's not already there
+            if (selectedAction === 'add') {
+                const option = document.createElement('option');
+                option.value = result.financial_year;
+                option.textContent = result.financial_year;
+                fySelect.appendChild(option);
             }
-        }
-
-        // Function to show success message
-        function showSuccessMessage(message) {
-            // Remove any existing success messages
-            const existingMessages = document.querySelectorAll('.success-message');
-            existingMessages.forEach(msg => msg.remove());
             
-            const successDiv = document.createElement('div');
-            successDiv.className = 'success-message';
-            successDiv.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background-color: #4CAF50;
-                color: white;
-                padding: 15px 20px;
-                border-radius: 5px;
-                z-index: 10000;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                font-weight: 500;
-            `;
-            successDiv.textContent = message;
-            
-            document.body.appendChild(successDiv);
-            
+            // Close modal after 3 seconds
             setTimeout(() => {
-                if (document.body.contains(successDiv)) {
-                    document.body.removeChild(successDiv);
-                }
-            }, 4000);
+                closeUploadModal();
+            }, 3000);
+        } else {
+            showUploadError(result.error || 'Upload failed');
         }
-
-        // Function to render the results
-        function renderResults(data) {
-            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-            const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, data.length);
-            const pageData = data.slice(startIndex, endIndex);
-            
-            if (pageData.length === 0) {
-                resultsDiv.innerHTML = '<p class="no-data">No results found matching your criteria</p>';
-                return;
-            }
-            
-            // Get column names from first record
-            const columns = Object.keys(pageData[0]);
-            
-            let tableHTML = `<table class='excel-table'>
-                <thead>
-                    <tr>`;
-            
-            columns.forEach(col => {
-                tableHTML += `<th>${col}</th>`;
-            });
-            
-            tableHTML += `</tr>
-                </thead>
-                <tbody>`;
-            
-            pageData.forEach(row => {
-                tableHTML += "<tr>";
-                columns.forEach(col => {
-                    const cellValue = row[col] !== undefined && row[col] !== null ? row[col] : 'N/A';
-                    tableHTML += `<td>${cellValue}</td>`;
-                });
-                tableHTML += "</tr>";
-            });
-            
-            tableHTML += "</tbody></table>";
-            resultsDiv.innerHTML = tableHTML;
+    } catch (error) {
+        console.error('Upload error:', error);
+        showUploadError('Upload failed: ' + error.message);
+    } finally {
+        uploadSubmitBtn.disabled = false;
+    }
+}
+    // Scroll to Top button visibility and action
+    window.onscroll = function() {
+        if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+            scrollToTopBtn.style.display = "block";
+        } else {
+            scrollToTopBtn.style.display = "none";
         }
+    };
 
-        // Function to render pagination controls
-        function renderPagination() {
-            if (totalPages <= 1) {
-                paginationDiv.innerHTML = '';
-                return;
-            }
-            
-            let paginationHTML = '';
-            
-            // Previous button
-            paginationHTML += `<button class="btn-outline" ${currentPage === 1 ? 'disabled' : ''} onclick="searchData(${currentPage - 1})">
-                <i class="fas fa-chevron-left"></i>
-            </button>`;
-            
-            // Page numbers
-            const startPage = Math.max(1, currentPage - 2);
-            const endPage = Math.min(totalPages, startPage + 4);
-            
-            for (let i = startPage; i <= endPage; i++) {
-                paginationHTML += `<button class="${i === currentPage ? 'active' : 'btn-outline'}" onclick="searchData(${i})">${i}</button>`;
-            }
-            
-            // Next button
-            paginationHTML += `<button class="btn-outline" ${currentPage === totalPages ? 'disabled' : ''} onclick="searchData(${currentPage + 1})">
-                <i class="fas fa-chevron-right"></i>
-            </button>`;
-            
-            paginationDiv.innerHTML = paginationHTML;
+    scrollToTopBtn.onclick = function() {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    // Initialize date inputs with default values
+    function initializeDates() {
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        
+        document.getElementById('fromDate').valueAsDate = firstDayOfMonth;
+        document.getElementById('toDate').valueAsDate = today;
+    }
+
+    // Event listeners
+    unitSelect.addEventListener('change', updateFYOptions);
+    searchBtn.addEventListener('click', () => searchData(1));
+    resetBtn.addEventListener('click', resetFilters);
+    exportBtn.addEventListener('click', exportData);
+    uploadBtn.addEventListener('click', showUploadModal);
+    closeModal.addEventListener('click', closeUploadModal);
+    window.addEventListener('click', (e) => {
+        if (e.target === uploadModal) {
+            closeUploadModal();
         }
+    });
 
-        // Function to reset all filters
-        function resetFilters() {
-            unitSelect.value = '';
-            fySelect.innerHTML = '<option value="">Select FY</option>';
-            fySelect.disabled = true;
-            document.getElementById('shift').value = '';
-            document.getElementById('orderTdc').value = '';
-            document.getElementById('month').value = '';
-            document.getElementById('fromDate').value = '';
-            document.getElementById('toDate').value = '';
-            
-            resultsDiv.innerHTML = '<p class="no-data">Select Unit and FY, then click Search to load data</p>';
-            paginationDiv.innerHTML = '';
-            resultCountSpan.textContent = '0';
-            hideError();
+    // Upload modal navigation
+    prevBtn.addEventListener('click', () => {
+        if (currentUploadStep > 1) {
+            currentUploadStep--;
+            updateUploadStep();
         }
+    });
 
-        // Scroll to Top button visibility and action
-        window.onscroll = function() {
-            if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-                scrollToTopBtn.style.display = "block";
-            } else {
-                scrollToTopBtn.style.display = "none";
-            }
-        };
-
-        scrollToTopBtn.onclick = function() {
-            window.scrollTo({ top: 0, behavior: "smooth" });
-        };
-
-        // Initialize date inputs with default values
-        function initializeDates() {
-            const today = new Date();
-            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            
-            document.getElementById('fromDate').valueAsDate = firstDayOfMonth;
-            document.getElementById('toDate').valueAsDate = today;
+    nextBtn.addEventListener('click', () => {
+        if (validateCurrentStep()) {
+            uploadStatus.className = 'upload-status';
+            uploadStatus.textContent = '';
+            currentUploadStep++;
+            updateUploadStep();
         }
+    });
 
-        // Event listeners
-        unitSelect.addEventListener('change', updateFYOptions);
-        searchBtn.addEventListener('click', () => searchData(1));
-        resetBtn.addEventListener('click', resetFilters);
-        exportBtn.addEventListener('click', exportData);
+    uploadSubmitBtn.addEventListener('click', submitUpload);
 
-        // To Date validation
-        document.getElementById('toDate').addEventListener('change', function() {
-            const fromDate = document.getElementById('fromDate').value;
-            if (this.value && !fromDate) {
-                showError('Please select From Date first');
-                this.value = '';
-            }
-        });
+    // To Date validation
+    document.getElementById('toDate').addEventListener('change', function() {
+        const fromDate = document.getElementById('fromDate').value;
+        if (this.value && !fromDate) {
+            showError('Please select From Date first');
+            this.value = '';
+        }
+    });
 
-        // Run the initial setup when page loads
-        window.addEventListener('load', () => {
-            initializeDates();
-            resetFilters();
-        });
-    </script>
+    // Update file name pattern when unit changes
+    uploadUnit.addEventListener('change', function() {
+        if (this.value) {
+            const pattern = this.value === 'CGL-2' ? '22datcsv' : '22datacgl';
+            fileNamePattern.textContent = `${pattern} (where 22 is the last two digits of FY)`;
+        }
+    });
+
+    // Run the initial setup when page loads
+    window.addEventListener('load', () => {
+        initializeDates();
+        resetFilters();
+    });
+</script>
 </body>
 </html>

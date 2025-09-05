@@ -18,10 +18,35 @@ from flask import Flask, render_template, request, jsonify, send_file
 import pickle
 import numpy as np
 import re
+import uuid
 import sqlite3
 from datetime import datetime
 import pandas as pd
 from io import BytesIO
+from werkzeug.utils import secure_filename
+
+
+# Add this configuration at the top of your app, after the imports
+# UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'new')
+# ALLOWED_EXTENSIONS = {'csv'}
+
+# Your upload folder path
+UPLOAD_FOLDER = r"C:\ProgramData\MySQL\MySQL Server 8.0\Data\new"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Allowed extensions
+# ALLOWED_EXTENSIONS = {'csv'}
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'csv'
+
+
+
+
+
+
+
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -308,6 +333,194 @@ def get_month_data(month_year):
             'booked_time': 0.0,
             'remaining_time': 14400.0
         }
+    
+# import csv
+# import chardet
+# import traceback
+
+# def import_csv_to_mysql(file_path, table_name, action="add"):
+#     """
+#     Import CSV into MySQL with minimal modifications:
+#     - Detects file encoding
+#     - Uses the header row as column names (escaped and made unique if necessary)
+#     - If action == "update": drop the table first and reload
+#     - Inserts all rows as TEXT exactly as read (no cleaning)
+#     """
+#     conn = None
+#     try:
+#         conn = db_pool.get_connection()
+#         cursor = conn.cursor()
+
+#         # 1) detect encoding
+#         with open(file_path, "rb") as f:
+#             raw = f.read(100000)  # sample
+#             enc = chardet.detect(raw).get("encoding") or "latin1"
+#         print(f"[import_csv_to_mysql] using encoding: {enc}")
+
+#         # 2) open CSV with detected encoding
+#         with open(file_path, newline='', encoding=enc, errors='replace') as csvfile:
+#             reader = csv.reader(csvfile)
+#             try:
+#                 headers = next(reader)
+#             except StopIteration:
+#                 raise ValueError("CSV file is empty")
+
+#             # 3) prepare SQL-safe column identifiers (quote with backticks)
+#             #    - escape internal backticks by doubling them
+#             #    - ensure non-empty
+#             #    - ensure uniqueness by appending suffixes if duplicate
+#             sanitized_cols = []
+#             seen = {}
+#             for i, raw_col in enumerate(headers):
+#                 col = "" if raw_col is None else str(raw_col)
+#                 if col == "":
+#                     col = f"col_{i+1}"   # minimal unavoidable rename for empty header
+#                 # escape any backticks inside name (MySQL uses backticks for identifiers)
+#                 col_escaped = col.replace("`", "``")
+#                 base = col_escaped
+#                 count = seen.get(base, 0)
+#                 if count:
+#                     # make unique by suffixing
+#                     col_escaped = f"{base}_{count+1}"
+#                     seen[base] = count + 1
+#                 else:
+#                     seen[base] = 1
+#                 sanitized_cols.append(col_escaped)
+
+#             # 4) create/drop table depending on action
+#             if action == "update":
+#                 cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
+
+#             # Build CREATE TABLE statement (all columns as LONGTEXT to preserve everything)
+#             cols_def = ", ".join([f"`{c}` LONGTEXT" for c in sanitized_cols])
+#             create_sql = f"CREATE TABLE IF NOT EXISTS `{table_name}` ({cols_def})"
+#             cursor.execute(create_sql)
+
+#             # 5) prepare insert statement
+#             placeholders = ", ".join(["%s"] * len(sanitized_cols))
+#             insert_sql = f"INSERT INTO `{table_name}` ({', '.join([f'`{c}`' for c in sanitized_cols])}) VALUES ({placeholders})"
+
+#             # 6) read and insert rows exactly as-is; pad/truncate rows to match columns
+#             batch = []
+#             for row in reader:
+#                 # row may be shorter/longer than header: pad with '' or truncate
+#                 if len(row) < len(sanitized_cols):
+#                     row = list(row) + [''] * (len(sanitized_cols) - len(row))
+#                 elif len(row) > len(sanitized_cols):
+#                     row = row[:len(sanitized_cols)]
+#                 # ensure all values are strings (preserve as-is)
+#                 row = [None if v is None else str(v) for v in row]
+#                 batch.append(row)
+
+#                 # to avoid huge memory, insert in chunks
+#                 if len(batch) >= 1000:
+#                     cursor.executemany(insert_sql, batch)
+#                     batch = []
+
+#             if batch:
+#                 cursor.executemany(insert_sql, batch)
+
+#         conn.commit()
+#         print(f"[import_csv_to_mysql] Imported {file_path} -> `{table_name}` (rows inserted).")
+
+#     except Exception as e:
+#         # log and re-raise so upload route can catch and return error
+#         logger.error(f"CSV import failed for {file_path}: {e}")
+#         logger.error(traceback.format_exc())
+#         raise
+#     finally:
+#         if conn and conn.is_connected():
+#             cursor.close()
+#             conn.close()
+
+
+import csv
+import chardet
+import traceback
+
+def import_csv_to_mysql(file_path, table_name, action="add"):
+    """
+    Import CSV into MySQL with minimal modifications:
+    - Detects file encoding
+    - Uses the header row as column names (backtick-escaped)
+    - If action == "update": drop the table first and reload
+    - Inserts all rows as-is (NULLs, spaces, duplicates accepted)
+    """
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # 1) detect encoding
+        with open(file_path, "rb") as f:
+            raw = f.read(100000)  # sample
+            enc = chardet.detect(raw).get("encoding") or "latin1"
+        print(f"[import_csv_to_mysql] using encoding: {enc}")
+
+        # 2) open CSV with detected encoding
+        with open(file_path, newline='', encoding=enc, errors='replace') as csvfile:
+            reader = csv.reader(csvfile)
+            try:
+                headers = next(reader)
+            except StopIteration:
+                raise ValueError("CSV file is empty")
+
+            # 3) prepare SQL-safe column identifiers (only escape with backticks)
+            sanitized_cols = []
+            for i, raw_col in enumerate(headers):
+                col = "" if raw_col is None else str(raw_col).strip()
+                if col == "":
+                    col = f"col_{i+1}"   # only for empty header
+                col_escaped = col.replace("`", "``")  # escape backticks inside names
+                sanitized_cols.append(col_escaped)
+
+            # 4) create/drop table depending on action
+            if action == "update":
+                cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
+
+            # Build CREATE TABLE statement
+            # 👉 keep LONGTEXT for all columns (accepts numbers, decimals, NULLs, blanks)
+            cols_def = ", ".join([f"`{c}` LONGTEXT" for c in sanitized_cols])
+            create_sql = f"CREATE TABLE IF NOT EXISTS `{table_name}` ({cols_def})"
+            cursor.execute(create_sql)
+
+            # 5) prepare insert statement
+            placeholders = ", ".join(["%s"] * len(sanitized_cols))
+            insert_sql = f"INSERT INTO `{table_name}` ({', '.join([f'`{c}`' for c in sanitized_cols])}) VALUES ({placeholders})"
+
+            # 6) read and insert rows as-is
+            batch = []
+            for row in reader:
+                # row may be shorter/longer than header → pad/truncate
+                if len(row) < len(sanitized_cols):
+                    row = list(row) + [None] * (len(sanitized_cols) - len(row))
+                elif len(row) > len(sanitized_cols):
+                    row = row[:len(sanitized_cols)]
+                # keep None as NULL, strings as-is
+                batch.append([None if v == "" else v for v in row])
+
+                if len(batch) >= 1000:
+                    cursor.executemany(insert_sql, batch)
+                    batch = []
+
+            if batch:
+                cursor.executemany(insert_sql, batch)
+
+        conn.commit()
+        print(f"[import_csv_to_mysql] Imported {file_path} -> `{table_name}` (rows inserted).")
+
+    except Exception as e:
+        logger.error(f"CSV import failed for {file_path}: {e}")
+        logger.error(traceback.format_exc())
+        raise
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+
+
 
 @app.route('/order_punch')
 def order_punch():
@@ -941,7 +1154,6 @@ def export_data():
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
-
 @app.route('/search', methods=['POST'])
 def search_data():
     conn = None
@@ -1060,7 +1272,7 @@ def search_data():
                     if isinstance(value, datetime):
                         ordered_row[column_name] = value.strftime('%Y-%m-%d %H:%M:%S')
                     elif isinstance(value, bytes):
-                        ordered_row[column_name] = value.decode('utf-8')
+                        ordered_row[column_name] = value.decode('latin1')
                     else:
                         ordered_row[column_name] = value
                 else:
@@ -1292,70 +1504,86 @@ def export_summary():
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
-@app.route('/get_filtered_data', methods=['POST'])
-def get_filtered_data():
-    data = request.json
-    cgl = data.get('cgl')
-    fy = data.get('fy')
-    product = data.get('product')
-
-    if not cgl or not fy or not product:
-        return jsonify({"error": "Missing required inputs: cgl, fy, and product are required"}), 400
-
-    # Determine table name
-    table = None
-    if cgl == "CGL-2":
-        table = f"{fy.replace('FY', '')}datacsv"
-    elif cgl == "CGL-3":
-        table = f"{fy.replace('FY', '')}datacgl"
-    else:
-        return jsonify({"error": "Invalid CGL line specified"}), 400
-
-    conn = None
+@app.route('/get-available-fy', methods=['POST'])
+def get_available_fy():
+    """Get available financial years by scanning the upload folder for specific unit"""
     try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # Check if table exists
-        cursor.execute("SHOW TABLES LIKE %s", (table,))
-        if not cursor.fetchone():
-            return jsonify({"error": f"Table '{table}' not found"}), 404
-
-        # Get column names in original order
-        cursor.execute(f"SHOW COLUMNS FROM `{table}`")
-        columns_info = cursor.fetchall()
-        column_names = [col['Field'] for col in columns_info]
-        select_columns = ", ".join([f"`{col}`" for col in column_names])
-
-        # Build the query with original column order
-        query = f"""
-        SELECT {select_columns}
-        FROM `{table}`
-        WHERE `Actual Product` = %s
-        AND `Next Unit` = %s
-        ORDER BY `Start Date` DESC, `Start Time` DESC
-        LIMIT 1000
-        """
-
-        cursor.execute(query, (product, cgl))
-        rows = cursor.fetchall()
+        data = request.get_json()
+        unit = data.get('unit')
         
-        if not rows:
-            return jsonify({
-                "message": "No results found matching your criteria",
-                "filters": {"cgl": cgl, "fy": fy, "product": product}
-            }), 404
-
-        return jsonify(rows)
-
-    except mysql.connector.Error as db_error:
-        return jsonify({"error": f"Database error: {str(db_error)}"}), 500
+        if not unit:
+            return jsonify({"error": "Unit is required"}), 400
+        
+        print(f"Scanning folder {UPLOAD_FOLDER} for {unit} files")
+        
+        # Check if folder exists
+        if not os.path.exists(UPLOAD_FOLDER):
+            print(f"Upload folder {UPLOAD_FOLDER} does not exist!")
+            return jsonify({"fyList": []})
+        
+        # List all files in the folder for debugging
+        all_files = os.listdir(UPLOAD_FOLDER)
+        print(f"All files in folder: {all_files}")
+        
+        # Scan the upload folder for files matching the specific unit pattern
+        fy_list = []
+        for filename in all_files:
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            
+            if unit == 'CGL-2' and filename.endswith('datcsv.csv'):
+                print(f"Found CGL-2 file: {filename}")
+                # Extract FY from filename (e.g., "24datcsv.csv" -> "FY24")
+                if len(filename) >= 10:  # Ensure filename is long enough
+                    fy_number = filename[:2]
+                    # Validate it's a valid year number
+                    if fy_number.isdigit() and 0 <= int(fy_number) <= 99:
+                        fy_list.append(f"FY{fy_number}")
+                        print(f"Added FY: FY{fy_number}")
+            
+            elif unit == 'CGL-3' and filename.endswith('datacgl.csv'):
+                print(f"Found CGL-3 file: {filename}")
+                # Extract FY from filename (e.g., "24datacgl.csv" -> "FY24")
+                if len(filename) >= 12:  # Ensure filename is long enough
+                    fy_number = filename[:2]
+                    # Validate it's a valid year number
+                    if fy_number.isdigit() and 0 <= int(fy_number) <= 99:
+                        fy_list.append(f"FY{fy_number}")
+                        print(f"Added FY: FY{fy_number}")
+        
+        # Remove duplicates and sort
+        fy_list = sorted(list(set(fy_list)))
+        
+        print(f"Final FY list for {unit}: {fy_list}")
+        return jsonify({"fyList": fy_list})
+            
     except Exception as e:
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
-    finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
+        logger.error(f"Error getting available FY: {str(e)}")
+        return jsonify({"error": "Failed to get available financial years"}), 500
+@app.route('/list-uploaded-files')
+def list_uploaded_files():
+    """List all uploaded CSV files"""
+    try:
+        files = []
+        for filename in os.listdir(UPLOAD_FOLDER):
+            if filename.endswith('.csv'):
+                file_path = os.path.join(UPLOAD_FOLDER, filename)
+                file_size = os.path.getsize(file_path)
+                files.append({
+                    'name': filename,
+                    'size': file_size,
+                    'upload_date': datetime.fromtimestamp(os.path.getctime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                })
+        
+        return jsonify({"success": True, "files": files})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+
+
+
+    
 
 @app.route('/debug/tables')
 def debug_tables():
@@ -1618,6 +1846,165 @@ def debug_date_conversion_test():
         "date_conversion_test": converted_dates,
         "explanation": "Converting from HTML date input format (yyyy-mm-dd) to database format (dd-mm-yyyy)"
     })
+
+@app.route('/upload', methods=['POST'])
+def upload_production_data():
+    try:
+        # Get the selected unit
+        unit = request.form.get('unit')
+        
+        if not unit:
+            flash('Please select a unit', 'error')
+            return redirect(request.referrer or url_for('production'))
+        
+        # Handle file upload if you have file input
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename != '':
+                # Ensure uploads directory exists
+                os.makedirs('uploads', exist_ok=True)
+                filename = secure_filename(file.filename)
+                file.save(os.path.join('uploads', filename))
+                flash('File uploaded successfully', 'success')
+        
+        # Process the form data and redirect to next step
+        flash(f'Unit {unit} selected successfully', 'success')
+        # You should define a 'next_step' route or change this redirect as needed
+        return redirect(url_for('next_step'))
+        
+    except Exception as e:
+        flash(f'Error processing form: {str(e)}', 'error')
+        return redirect(request.referrer or url_for('production'))
+
+@app.route('/next_step')
+def next_step():
+    unit = request.args.get('unit')
+    if not unit:
+        flash('No unit selected', 'error')
+        return redirect(url_for('production'))
+    
+    return render_template('next_step.html', unit=unit)
+
+
+@app.route('/upload-data', methods=['POST'])
+def upload_data():
+    """Handle CSV file upload - save to directory AND import into MySQL as-is"""
+    try:
+        # Get form data
+        unit = request.form.get('unit')
+        financial_year = request.form.get('financialYear')
+        action = request.form.get('action')  # expected 'add' or 'update'
+
+        if not unit or not financial_year or not action:
+            return jsonify({"success": False, "error": "Missing required parameters"}), 400
+
+        if 'csvFile' not in request.files:
+            return jsonify({"success": False, "error": "No file uploaded"}), 400
+
+        file = request.files['csvFile']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"success": False, "error": "File must be a CSV"}), 400
+
+        # Determine expected filename (keep your existing naming convention)
+        fy_number = financial_year[2:]  # e.g., FY22 -> "22"
+        if unit == 'CGL-2':
+            expected_filename = f"{fy_number}datacsv.csv"
+        elif unit == 'CGL-3':
+            expected_filename = f"{fy_number}datacgl.csv"
+        else:
+            return jsonify({"success": False, "error": "Invalid unit"}), 400
+
+        # Accept both exact filename or a filename that endswith expected (tolerant)
+        # but to keep your original enforcement, leave strict equality check:
+        if file.filename != expected_filename:
+            return jsonify({"success": False, "error": f"File name must be {expected_filename} for {unit}"}), 400
+
+        file_path = os.path.join(UPLOAD_FOLDER, expected_filename)
+
+        # add/update checks for the filesystem copy
+        if action == 'add' and os.path.exists(file_path):
+            return jsonify({"success": False, "error": f"File {expected_filename} already exists"}), 400
+        if action == 'update' and not os.path.exists(file_path):
+            return jsonify({"success": False, "error": f"File {expected_filename} does not exist for update"}), 400
+
+        # Save raw CSV into UPLOAD_FOLDER
+        file.save(file_path)
+
+        # Import CSV into MySQL as-is; on update we drop & reload, on add we create if not exists
+        import_csv_to_mysql(file_path, expected_filename.replace(".csv", ""), action=action)
+
+        file_size = os.path.getsize(file_path)
+        return jsonify({
+            "success": True,
+            "message": f"File {expected_filename} saved and imported into MySQL",
+            "file_path": file_path,
+            "financial_year": financial_year,
+            "unit": unit,
+            "file_size": file_size
+        })
+
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": f"Upload failed: {str(e)}"}), 500
+
+@app.route('/debug-files')
+def debug_files():
+    """Debug endpoint to see all files in upload folder"""
+    try:
+        files = []
+        for filename in os.listdir(UPLOAD_FOLDER):
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file_info = {
+                'name': filename,
+                'size': os.path.getsize(file_path),
+                'is_file': os.path.isfile(file_path),
+                'type': 'CGL-2' if filename.endswith('datacsv.csv') else 'CGL-3' if filename.endswith('datacgl.csv') else 'Other'
+            }
+            files.append(file_info)
+        
+        return jsonify({"files": files})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500   
+
+
+
+@app.route('/debug-folder')
+def debug_folder():
+    """Debug endpoint to see exactly what's in the upload folder"""
+    try:
+        folder_info = {
+            "folder_path": UPLOAD_FOLDER,
+            "folder_exists": os.path.exists(UPLOAD_FOLDER),
+            "folder_writable": os.access(UPLOAD_FOLDER, os.W_OK) if os.path.exists(UPLOAD_FOLDER) else False,
+            "files": []
+        }
+        
+        if folder_info["folder_exists"]:
+            for filename in os.listdir(UPLOAD_FOLDER):
+                file_path = os.path.join(UPLOAD_FOLDER, filename)
+                folder_info["files"].append({
+                    'name': filename,
+                    'size': os.path.getsize(file_path),
+                    'is_file': os.path.isfile(file_path),
+                    'file_type': 'CGL-2' if filename.endswith('datcsv.csv') else 'CGL-3' if filename.endswith('datacgl.csv') else 'Other'
+                })
+        
+        return jsonify(folder_info)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500  
+
+    
+         
+    
+
+
+
+
+
 
 if __name__ == "__main__":
     # Initialize database tables
