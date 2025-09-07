@@ -31,11 +31,12 @@ app.secret_key = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
 
 # Database configuration with environment variables
 db_config =  {
-    "host": "localhost",
+    "host": "127.0.0.1",
     "user": "root",  # <-- change to your local MySQL user
     "password": "Megha@22",  # <-- change to your local MySQL password
     "database": "new",
-    "port": 3306
+    "port": 3306,
+    
 }
 # ok im in.
 # Create connection pool
